@@ -1,11 +1,11 @@
-from data.fetcher import TushareFetcher
+from data.fetcher import StockDataFetcher
 import pytest
 
-fetcher:TushareFetcher
+fetcher:StockDataFetcher
 
 def setup_module(module):
     global fetcher
-    fetcher = TushareFetcher()
+    fetcher = StockDataFetcher()
 
 def teardown_module(module):
     pass
@@ -17,7 +17,12 @@ def before_every_test():
     print()
 
 # uv run pytest ./tests/test_data/test_fetcher.py::test_get_daily_basic -v -s
-def test_get_daily_basic():
-    df=fetcher.get_daily_basic(ts_code="AAPL", start_date="20260409", end_date="20260416")
+def test_get_us_daily():
+    df=fetcher.get_us_daily(ts_code="AAPL", start_date="20260409", end_date="20260416")
     print(df)
     print(",".join(df.columns.to_list()))
+
+# uv run pytest ./tests/test_data/test_fetcher.py::test_get_stock_list_data -v -s
+def test_get_stock_list():
+    df=fetcher.get_stock_list_data()
+    print(df.head())
