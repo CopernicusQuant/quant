@@ -219,3 +219,4 @@ __marimo__/
 
 # Project-related
 config.yaml
+*.csv
