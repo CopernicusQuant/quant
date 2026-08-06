@@ -105,7 +105,7 @@ class StockDataFetcher:
             logger.info("found local stock list file")
             df_sec = pd.read_csv(stock_list_file)
         else:
-            df_sec = self.fetch_stock_list_sec()
+            df_sec = self._fetch_stock_list_sec()
             time.sleep(0.12) # sec has a 10 req/min limit
 
         # check stock metadata file
@@ -117,21 +117,29 @@ class StockDataFetcher:
             cik_list = df_sec["cik"].tolist()
             if (limits > 0):
                 cik_list = cik_list[:limits]
-            df_metadata = self.fetch_all_stock_metadata(cik_list=cik_list)
+            df_metadata = self._fetch_all_stock_metadata(cik_list=cik_list)
 
         # merge two files
-        df_full = df_sec.merge(
-            df_metadata,
-            on="ts_code",
-            how="left",
-            validate="1:1"
-        )
+        df_full = self._merge_stock_list_meta(df_sec=df_sec, df_metadata=df_metadata)
         output_file = self.output_folder / ENRICHED_STOCK_LIST_FILENAME
         self.output_folder.mkdir(parents=True, exist_ok=True)
         df_full.to_csv(output_file, index=False)
         return df_full
 
-    def fetch_stock_list_sec(self) -> pd.DataFrame:
+    def _merge_stock_list_meta(self, df_sec: pd.DataFrame, df_metadata: pd.DataFrame) -> pd.DataFrame:
+        df_metadata.dropna(subset=["ts_code", "sic_code"], inplace=True)
+        df_metadata.drop(columns=["cik"], inplace=True)
+        df_metadata["sic_code"] = df_metadata["sic_code"].astype(int)
+        df_full = df_sec.merge(
+            df_metadata,
+            on="ts_code",
+            how="inner",
+        )
+        df_full.drop_duplicates(["ts_code"], inplace=True)
+        df_full["sector"] = df_full["sic_code"].apply(self._sic_sector)
+        return df_full
+
+    def _fetch_stock_list_sec(self) -> pd.DataFrame:
         """Fetch full us stock list from sec
         Return Fields: cik, ts_code, company_name
         """
@@ -153,20 +161,19 @@ class StockDataFetcher:
         df_sec.to_csv(output_file, index=False)
         return df_sec
 
-    def fetch_all_stock_metadata(self, cik_list: list[int]) -> pd.DataFrame:
+    def _fetch_all_stock_metadata(self, cik_list: list[int]) -> pd.DataFrame:
         """Get all stock metadata one by one for the stocks from cik_list
         """
         metadata_rows = []
         num_fetched = 0
         for cik in cik_list:
-            result = self.fetch_single_stock_metadata(cik)
-            print(cik)
+            result = self._fetch_single_stock_metadata(cik)
             if result == None:
                 break
             metadata_rows.append(result)
             num_fetched += 1
             if num_fetched % 10 == 0:
-                print(f"===== num metadata fetched: {num_fetched} =====")
+                logger.info(f"===== num metadata fetched: {num_fetched} =====")
             time.sleep(0.12) # sec has a 10 req/min limit
         df_metadata = pd.DataFrame(metadata_rows)
         df_metadata.rename(columns={"ticker": "ts_code"}, inplace=True)
@@ -175,7 +182,7 @@ class StockDataFetcher:
         df_metadata.to_csv(output_file, index=False)
         return df_metadata
 
-    def fetch_single_stock_metadata(self, cik: int) -> dict | None:
+    def _fetch_single_stock_metadata(self, cik: int) -> dict | None:
         """Fetch single stock metadata from sec.
         Return Fields: cik, ticker, exchange, sic_code, industry
         """
@@ -201,3 +208,29 @@ class StockDataFetcher:
             "sic_code": data.get("sic"),
             "industry": data.get("sicDescription")
         }
+
+    def _sic_sector(self, sic_code:int) -> str:
+        code = sic_code // 100
+        if 1 <= code <= 9:
+            return "Agriculture, Forestry, Fishing"
+        if 10 <= code <= 14:
+            return "Mining"
+        if 15 <= code <= 17:
+            return "Construction"
+        if 20 <= code <= 39:
+            return "Manufacturing"
+        if 40 <= code <= 49:
+            return "Transportation, Utilities"
+        if 50 <= code <= 51:
+            return "Wholesale Trade"
+        if 52 <= code <= 59:
+            return "Retail Trade"
+        if 60 <= code <= 67:
+            return "Finance, Insurance, Real Estate"
+        if 70 <= code <= 89:
+            return "Services"
+        if 91 <= code <= 97:
+            return "Public Administration"
+        if code == 99:
+            return "Nonclassifiable"
+        return "Unknown"

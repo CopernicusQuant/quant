@@ -24,5 +24,5 @@ def test_get_us_daily():
 
 # uv run pytest ./tests/test_data/test_fetcher.py::test_get_stock_list_data -v -s
 def test_get_stock_list():
-    df=fetcher.get_stock_list_data(limits=10)
+    df=fetcher.get_stock_list_data()
     print(df.head())

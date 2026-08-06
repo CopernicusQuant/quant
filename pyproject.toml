@@ -13,6 +13,10 @@ dependencies = [
 [tool.ty.environment]
 python = ".venv"
 
+[tool.pytest.ini_options]
+log_cli = true
+log_cli_level = "INFO"
+
 [dependency-groups]
 dev = [
     "ipykernel>=7.3.0",
