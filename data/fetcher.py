@@ -14,6 +14,7 @@ from utils.config import load_config
 logger = logging.getLogger(__name__)
 
 STOCK_LIST_FILENAME = "stock_list_sec.csv"
+STOCK_LIST_TUSHARE_FILENAME = "stock_list_tushare.csv"
 STOCK_METADATA_FILENAME = "stock_list_meta.csv"
 ENRICHED_STOCK_LIST_FILENAME = "stock_list_with_metadata.csv"
 
@@ -31,12 +32,13 @@ class StockDataFetcher:
             tushare_config = config["tushare"]
 
         ts.set_token(tushare_config.get("token"))
-        self.pro = ts.pro_api()
+        self.tushare_pro = ts.pro_api()
         logger.info("StockDataFetcher initialized")
 
         # setup data output folder
         output_folder = Path(__file__).resolve().parent / "output"
         self.output_folder = output_folder
+        self.output_folder.mkdir(parents=True, exist_ok=True)
 
 
     def get_us_daily(
@@ -64,7 +66,7 @@ class StockDataFetcher:
         while try_times < 3:
             try:
                 # this api returns 6000 rows in maximum; can retrieve full data through pagination
-                df = self.pro.us_daily(
+                df = self.tushare_pro.us_daily(
                     ts_code=ts_code,
                     start_date=start_date,
                     end_date=end_date,
@@ -99,14 +101,22 @@ class StockDataFetcher:
 
 
     def get_stock_list_data(self, refresh:bool=False, limits:int=0) -> pd.DataFrame:
-        # check stock list file
-        stock_list_file = self.output_folder / STOCK_LIST_FILENAME
-        if stock_list_file.exists() and not refresh:
+        # check sec stock list file
+        sec_stock_list_file = self.output_folder / STOCK_LIST_FILENAME
+        if sec_stock_list_file.exists() and not refresh:
             logger.info("found local stock list file")
-            df_sec = pd.read_csv(stock_list_file)
+            df_sec = pd.read_csv(sec_stock_list_file)
         else:
             df_sec = self._fetch_stock_list_sec()
             time.sleep(0.12) # sec has a 10 req/min limit
+
+        # check tushare stock list file
+        tushare_stock_list_file = self.output_folder / STOCK_LIST_TUSHARE_FILENAME
+        if tushare_stock_list_file.exists() and not refresh:
+            logger.info("found local tushare stock list file")
+            df_tushare = pd.read_csv(tushare_stock_list_file)
+        else:
+            df_tushare = self._fetch_stock_list_tushare()
 
         # check stock metadata file
         stock_meta_file = self.output_folder / STOCK_METADATA_FILENAME
@@ -120,14 +130,18 @@ class StockDataFetcher:
             df_metadata = self._fetch_all_stock_metadata(cik_list=cik_list)
 
         # merge two files
-        df_full = self._merge_stock_list_meta(df_sec=df_sec, df_metadata=df_metadata)
+        df_full = self._merge_stock_list_meta(
+            df_sec=df_sec,
+            df_tushare=df_tushare,
+            df_metadata=df_metadata)
         output_file = self.output_folder / ENRICHED_STOCK_LIST_FILENAME
-        self.output_folder.mkdir(parents=True, exist_ok=True)
         df_full.to_csv(output_file, index=False)
         return df_full
 
-    def _merge_stock_list_meta(self, df_sec: pd.DataFrame, df_metadata: pd.DataFrame) -> pd.DataFrame:
-        df_metadata.dropna(subset=["ts_code", "sic_code"], inplace=True)
+    def _merge_stock_list_meta(self, df_sec: pd.DataFrame, df_tushare: pd.DataFrame, df_metadata: pd.DataFrame) -> pd.DataFrame:
+        df_tushare.dropna(subset=["ts_code", "list_date"], inplace=True)
+        df_tushare.drop(columns=["enname"], inplace=True)
+        df_metadata.dropna(subset=["ts_code", "sic_code", "exchange"], inplace=True)
         df_metadata.drop(columns=["cik"], inplace=True)
         df_metadata["sic_code"] = df_metadata["sic_code"].astype(int)
         df_full = df_sec.merge(
@@ -135,7 +149,13 @@ class StockDataFetcher:
             on="ts_code",
             how="inner",
         )
+        df_full = df_full.merge(
+            df_tushare,
+            on="ts_code",
+            how="inner"
+        )
         df_full.drop_duplicates(["ts_code"], inplace=True)
+        df_full = df_full[~(df_full["exchange"] == "OTC")].reset_index(drop=True)
         df_full["sector"] = df_full["sic_code"].apply(self._sic_sector)
         return df_full
 
@@ -157,9 +177,36 @@ class StockDataFetcher:
         )
         # Save the DataFrame as a csv file into data/output/
         output_file = self.output_folder / STOCK_LIST_FILENAME
-        self.output_folder.mkdir(parents=True, exist_ok=True)
         df_sec.to_csv(output_file, index=False)
         return df_sec
+
+    def _fetch_stock_list_tushare(self) -> pd.DataFrame:
+        """Get stock list from tushare, this data provides list date and classify info
+        """
+        all_dfs = []
+        limit = 6000
+        offset = 0
+        while True:
+            df = self.tushare_pro.us_basic(
+                offset=offset,
+                limit=limit,
+                list_status="L",
+                fields=["ts_code", "list_date", "enname", "classify"]
+            )
+            # if df is empty, it means that the scan has completed
+            if df is None or df.empty:
+                break
+            all_dfs.append(df)
+            # if the number of data is less than limit, it also means the scan has completed
+            if len(df) < limit:
+                break
+            offset += limit
+        final_df = pd.concat(all_dfs, ignore_index=True)
+        final_df.dropna(subset=["ts_code", "list_date"], inplace=True)
+        final_df["list_date"] = final_df["list_date"].astype("string")
+        output_file = self.output_folder / STOCK_LIST_TUSHARE_FILENAME
+        final_df.to_csv(output_file, index=False)
+        return final_df
 
     def _fetch_all_stock_metadata(self, cik_list: list[int]) -> pd.DataFrame:
         """Get all stock metadata one by one for the stocks from cik_list
