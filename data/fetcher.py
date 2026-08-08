@@ -24,7 +24,7 @@ SEC_HEADERS = {
 }
 
 class StockDataFetcher:
-    """Tushare data fetcher"""
+    """Stock data fetcher"""
 
     def __init__(self, config: dict | None = None):
         if config is None:
@@ -100,7 +100,41 @@ class StockDataFetcher:
         return df
 
 
+    def get_index_daily(self, ts_code:str, start_date:str, end_date:str="") -> pd.DataFrame:
+        """Get daily index from Tushare. Supported index for US market: DJI, IXIC, SPX
+        RUT is still important but currently Tushare does not have this data in their DB
+        Return df columns: ts_code, trade_date, open, high, low, close, vol, amount
+        """
+        if not ts_code and start_date != end_date:
+            raise ValueError("tushare index_global(): not indicate ts_code, trade_date can only be one day")
+        if (int(end_date)-int(start_date))//10000>23:
+            raise ValueError("tushare index_global(): time span could not more than 23 years")
+        df = self.tushare_pro.index_global(
+            ts_code=ts_code,
+            start_date=start_date,
+            end_date=end_date,
+            fields=[
+                "ts_code",
+                "trade_date",
+                "open",
+                "close",
+                "high",
+                "low",
+                "vol",
+                "amount"
+            ])
+        # because tushare doesn't have amount data (empty), so we might need to approximate it
+        # in the future
+        df = df.rename(columns={"vol": "volume"})
+        df = df.sort_values("trade_date").reset_index(drop=True)
+        return df
+
+
     def get_stock_list_data(self, refresh:bool=False, limits:int=0) -> pd.DataFrame:
+        """
+        Retrieve raw data from SEC, and Tushare, merge and return a comprehensive stock list
+        data with all the preset fields
+        """
         # check sec stock list file
         sec_stock_list_file = self.output_folder / STOCK_LIST_FILENAME
         if sec_stock_list_file.exists() and not refresh:
