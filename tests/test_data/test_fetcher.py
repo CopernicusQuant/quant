@@ -18,11 +18,16 @@ def before_every_test():
 
 # uv run pytest ./tests/test_data/test_fetcher.py::test_get_daily_basic -v -s
 def test_get_us_daily():
-    df=fetcher.get_us_daily(ts_code="AAPL", start_date="20260409", end_date="20260416")
+    df = fetcher.get_us_daily(ts_code="AAPL", start_date="20260409", end_date="20260416")
     print(df)
     print(",".join(df.columns.to_list()))
 
 # uv run pytest ./tests/test_data/test_fetcher.py::test_get_stock_list_data -v -s
 def test_get_stock_list():
-    df=fetcher.get_stock_list_data()
+    df = fetcher.get_stock_list_data()
+    print(df.head())
+
+# uv run pytest ./tests/test_data/test_fetcher.py::test_get_index_daily -v -s
+def test_get_index_daily():
+    df = fetcher.get_index_daily(ts_code="DJI", start_date="20260801", end_date="20260806")
     print(df.head())
