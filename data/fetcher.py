@@ -125,8 +125,8 @@ class StockDataFetcher:
             ])
         # because tushare doesn't have amount data (empty), so we might need to approximate it
         # in the future
-        df.rename(columns={"vol": "volume"})
-        df.sort_values("trade_date").reset_index(drop=True)
+        df = df.rename(columns={"vol": "volume"})
+        df = df.sort_values("trade_date").reset_index(drop=True)
         return df
 
 
