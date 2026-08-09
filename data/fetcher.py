@@ -1,9 +1,10 @@
+from typing import Optional
 import json
 from pathlib import Path
 import requests
 import logging
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 import pandas as pd
@@ -24,7 +25,7 @@ SEC_HEADERS = {
 }
 
 class StockDataFetcher:
-    """Stock data fetcher"""
+    """Fetch US stock, index, calendar, and metadata data."""
 
     def __init__(self, config: dict | None = None):
         if config is None:
@@ -44,8 +45,12 @@ class StockDataFetcher:
     def get_us_daily(
         self, ts_code: str, start_date: str = "20050101", end_date: str = ""
     ) -> pd.DataFrame:
-        """A much more comprehensive way getting us stock daily data
-        Return Fields: ts_code,trade_date,close,turnover,pe,pb,[ps],total_share,total_mv,roe
+        """Fetch daily US stock data from Tushare.
+
+        Returns:
+            DataFrame with columns ``ts_code``, ``trade_date``, ``close``,
+            ``turnover``, ``pe``, ``pb``, ``total_mv``, ``amount``, ``roe``,
+            and ``total_share``, sorted by date.
         """
         end_date = (
             datetime.now(tz=ZoneInfo("America/New_York")).strftime("%Y%m%d")
@@ -101,9 +106,14 @@ class StockDataFetcher:
 
 
     def get_index_daily(self, ts_code:str, start_date:str, end_date:str="") -> pd.DataFrame:
-        """Get daily index from Tushare. Supported index for US market: DJI, IXIC, SPX
-        RUT is still important but currently Tushare does not have this data in their DB
-        Return df columns: ts_code, trade_date, open, high, low, close, vol, amount
+        """Fetch daily US index data from Tushare.
+
+        Supported indices include ``DJI``, ``IXIC``, and ``SPX``.
+
+        Returns:
+            DataFrame with columns ``ts_code``, ``trade_date``, ``open``,
+            ``close``, ``high``, ``low``, ``volume``, and ``amount``, sorted
+            by date.
         """
         if not ts_code and start_date != end_date:
             raise ValueError("tushare index_global(): not indicate ts_code, trade_date can only be one day")
@@ -131,9 +141,16 @@ class StockDataFetcher:
 
 
     def get_stock_list_data(self, refresh:bool=False, limits:int=0) -> pd.DataFrame:
-        """
-        Retrieve raw data from SEC, and Tushare, merge and return a comprehensive stock list
-        data with all the preset fields
+        """Fetch, merge, and save the SEC, Tushare, and stock metadata lists.
+
+        Args:
+            refresh: Re-fetch cached source files when ``True``.
+            limits: Maximum number of SEC companies to enrich; ``0`` means all.
+
+        Returns:
+            DataFrame with columns ``cik``, ``ts_code``, ``company_name``,
+            ``exchange``, ``sic_code``, ``industry``, ``list_date``,
+            ``classify``, and ``sector``.
         """
         # check sec stock list file
         sec_stock_list_file = self.output_folder / STOCK_LIST_FILENAME
@@ -172,6 +189,43 @@ class StockDataFetcher:
         df_full.to_csv(output_file, index=False)
         return df_full
 
+
+    def get_trade_calendar(self, start_date: str, end_date: str, is_open: Optional[int]=None) -> pd.DataFrame:
+        """Return the trading calendar for an inclusive date range.
+
+        Args:
+            start_date: Start date in ``YYYYMMDD`` format.
+            end_date: End date in ``YYYYMMDD`` format.
+            is_open: Filter by market status: ``1`` open, ``0`` closed, or ``None`` for all.
+
+        Returns:
+            DataFrame with ``cal_date`` and ``is_open`` columns, sorted by date.
+        """
+        df = self.tushare_pro.us_tradecal(
+            start_date=start_date,
+            end_date=end_date,
+            is_open=is_open,
+            fields=["cal_date", "is_open"]
+        )
+        df = df.sort_values("cal_date").reset_index(drop=True)
+        return df
+
+    def get_next_trade_date(self, curr_date:str) -> str:
+        """Return the next US trading date after ``curr_date``.
+
+        Args:
+            curr_date: Current date in ``YYYYMMDD`` format.
+
+        Returns:
+            Next open date in ``YYYYMMDD`` format.
+        """
+        delta = 10 # look 10 days ahead
+        date = datetime.strptime(curr_date, "%Y%m%d").date()
+        start_date = (date + timedelta(days=1)).strftime("%Y%m%d") # start date is "tomorrow"
+        end_date = (date + timedelta(days=delta)).strftime("%Y%m%d")
+        cal = self.get_trade_calendar(start_date=start_date, end_date=end_date, is_open=1)
+        return cal.iloc[0].cal_date
+
     def _merge_stock_list_meta(self, df_sec: pd.DataFrame, df_tushare: pd.DataFrame, df_metadata: pd.DataFrame) -> pd.DataFrame:
         df_tushare.dropna(subset=["ts_code", "list_date"], inplace=True)
         df_tushare.drop(columns=["enname"], inplace=True)
@@ -194,8 +248,10 @@ class StockDataFetcher:
         return df_full
 
     def _fetch_stock_list_sec(self) -> pd.DataFrame:
-        """Fetch full us stock list from sec
-        Return Fields: cik, ts_code, company_name
+        """Fetch and save the US stock list from the SEC.
+
+        Returns:
+            DataFrame with columns ``cik``, ``ts_code``, and ``company_name``.
         """
         url = "https://www.sec.gov/files/company_tickers.json"
         response = requests.get(url, headers=SEC_HEADERS, timeout=30)
@@ -215,7 +271,11 @@ class StockDataFetcher:
         return df_sec
 
     def _fetch_stock_list_tushare(self) -> pd.DataFrame:
-        """Get stock list from tushare, this data provides list date and classify info
+        """Fetch and save the listed US stock list from Tushare.
+
+        Returns:
+            DataFrame with columns ``ts_code``, ``list_date``, ``enname``, and
+            ``classify``.
         """
         all_dfs = []
         limit = 6000
@@ -243,7 +303,14 @@ class StockDataFetcher:
         return final_df
 
     def _fetch_all_stock_metadata(self, cik_list: list[int]) -> pd.DataFrame:
-        """Get all stock metadata one by one for the stocks from cik_list
+        """Fetch and save SEC metadata for the specified CIKs.
+
+        Args:
+            cik_list: SEC Central Index Key values to fetch.
+
+        Returns:
+            DataFrame with columns ``cik``, ``ts_code``, ``exchange``,
+            ``sic_code``, and ``industry``.
         """
         metadata_rows = []
         num_fetched = 0
@@ -264,8 +331,14 @@ class StockDataFetcher:
         return df_metadata
 
     def _fetch_single_stock_metadata(self, cik: int) -> dict | None:
-        """Fetch single stock metadata from sec.
-        Return Fields: cik, ticker, exchange, sic_code, industry
+        """Fetch metadata for one company from the SEC.
+
+        Args:
+            cik: SEC Central Index Key.
+
+        Returns:
+            A dictionary with ``cik``, ``ticker``, ``exchange``, ``sic_code``,
+            and ``industry``, or ``None`` if the request fails.
         """
         cik_padded = str(cik).zfill(10)
         url = f"https://data.sec.gov/submissions/CIK{cik_padded}.json"
