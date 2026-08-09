@@ -31,3 +31,13 @@ def test_get_stock_list():
 def test_get_index_daily():
     df = fetcher.get_index_daily(ts_code="DJI", start_date="20260801", end_date="20260806")
     print(df.head())
+
+# uv run pytest ./tests/test_data/test_fetcher.py::test_get_trade_calendar -v -s
+def test_get_trade_calendar():
+    df = fetcher.get_trade_calendar(start_date="20260701", end_date="20260801")
+    print(df.head())
+
+# uv run pytest ./tests/test_data/test_fetcher.py::test_get_next_trade_date -v -s
+def test_get_next_trade_date():
+    next_trade_day = fetcher.get_next_trade_date(curr_date="20260522")
+    print(next_trade_day) # should be 20260526 if curr_date is 20260522
