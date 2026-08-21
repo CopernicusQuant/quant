@@ -1,5 +1,20 @@
+from data import StockDataFetcher, StockDataStore, DataFormat
+
 def main():
-    print("Hello from quant!")
+    fetcher = StockDataFetcher()
+    store = StockDataStore()
+    # temp code
+    ts_code = "AAPL"
+    data_df = fetcher.get_us_daily(
+        ts_code="AAPL",
+        start_date="20050101",
+        end_date="20260820"
+    )
+    store.save_data(
+        ts_code=ts_code,
+        data_df=data_df,
+        # format=DataFormat.CSV
+    )
 
 
 if __name__ == "__main__":

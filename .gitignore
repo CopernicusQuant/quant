@@ -220,3 +220,5 @@ __marimo__/
 # Project-related
 config.yaml
 *.csv
+data/store/
+.DS_Store

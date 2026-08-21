@@ -78,7 +78,10 @@ class StockDataFetcher:
                     fields=[
                         "ts_code",
                         "trade_date",
+                        "open",
                         "close",
+                        "high",
+                        "low",
                         "turnover_ratio",
                         "pe",
                         "pb",
@@ -142,7 +145,7 @@ class StockDataFetcher:
 
     def get_stock_list_data(self, refresh:bool=False, limits:int=0) -> pd.DataFrame:
         """Fetch, merge, and save the SEC, Tushare, and stock metadata lists.
-
+        We mainly use this for testing rather than real data collection
         Args:
             refresh: Re-fetch cached source files when ``True``.
             limits: Maximum number of SEC companies to enrich; ``0`` means all.
