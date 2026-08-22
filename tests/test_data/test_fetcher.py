@@ -16,13 +16,28 @@ def before_every_test():
     yield
     print()
 
-# uv run pytest ./tests/test_data/test_fetcher.py::test_get_daily_basic -v -s
+# uv run pytest ./tests/test_data/test_fetcher.py::test_get_us_daily -v -s
 def test_get_us_daily():
     df = fetcher.get_us_daily(ts_code="AAPL", start_date="20260409", end_date="20260416")
     print(df)
     print(",".join(df.columns.to_list()))
 
-# uv run pytest ./tests/test_data/test_fetcher.py::test_get_stock_list_data -v -s
+# uv run pytest ./tests/test_data/test_fetcher.py::test_get_us_daily_with_list_cache -v -s
+def test_get_us_daily_with_list_cache():
+    fetcher.load_stock_list()
+    df = fetcher.get_us_daily(ts_code="SPCX", start_date="20050101", end_date="20260701")
+    print(df)
+    assert str(df.iloc[0]["trade_date"]) == "20260612" # ensure don't mistakenly get prev stock sharing same ts_code
+    print(",".join(df.columns.to_list()))
+
+# uv run pytest ./tests/test_data/test_fetcher.py::test_get_us_daily_with_invalid_code -v -s
+def test_get_us_daily_with_invalid_code():
+    fetcher.load_stock_list()
+    with pytest.raises(KeyError):
+        fetcher.get_us_daily(
+            ts_code="NOT_REAL_CODE", start_date="20050101", end_date="20260701")
+
+# uv run pytest ./tests/test_data/test_fetcher.py::test_get_stock_list -v -s
 def test_get_stock_list():
     df = fetcher.get_stock_list_data()
     print(df.head())
