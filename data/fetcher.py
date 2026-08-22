@@ -1,6 +1,13 @@
+from data.consts import (
+    STOCK_LIST_PATH,
+    STOCK_LIST_FILENAME,
+    STOCK_METADATA_FILENAME,
+    ENRICHED_STOCK_LIST_FILENAME,
+    STOCK_LIST_TUSHARE_FILENAME
+)
 from typing import Optional
 import json
-from pathlib import Path
+import os
 import requests
 import logging
 import time
@@ -14,11 +21,6 @@ from utils.config import load_config
 
 logger = logging.getLogger(__name__)
 
-STOCK_LIST_FILENAME = "stock_list_sec.csv"
-STOCK_LIST_TUSHARE_FILENAME = "stock_list_tushare.csv"
-STOCK_METADATA_FILENAME = "stock_list_meta.csv"
-ENRICHED_STOCK_LIST_FILENAME = "stock_list_with_metadata.csv"
-
 # Should provide your real name and contact email
 SEC_HEADERS = {
     "User-Agent": "MyQuantApp admin@myproject.com"
@@ -27,7 +29,10 @@ SEC_HEADERS = {
 class StockDataFetcher:
     """Fetch US stock, index, calendar, and metadata data."""
 
-    def __init__(self, config: dict | None = None):
+    # stock list cache
+    df_stock_list:pd.DataFrame | None = None
+
+    def __init__(self, config: dict | None = None, load_stock_list=False):
         if config is None:
             config = load_config()
             tushare_config = config["tushare"]
@@ -37,10 +42,19 @@ class StockDataFetcher:
         logger.info("StockDataFetcher initialized")
 
         # setup data output folder
-        output_folder = Path(__file__).resolve().parent / "output"
-        self.output_folder = output_folder
-        self.output_folder.mkdir(parents=True, exist_ok=True)
+        stock_list_folder = STOCK_LIST_PATH
+        self.stock_list_folder = stock_list_folder
+        os.makedirs(self.stock_list_folder, exist_ok=True)
 
+        if (load_stock_list):
+            self.load_stock_list()
+
+    def load_stock_list(self):
+        """
+        load stock data and set ts_code as index
+        """
+        df_stock_list = self.get_stock_list_data()
+        self.df_stock_list = df_stock_list.set_index("ts_code")
 
     def get_us_daily(
         self, ts_code: str, start_date: str = "20050101", end_date: str = ""
@@ -52,6 +66,7 @@ class StockDataFetcher:
             ``turnover``, ``pe``, ``pb``, ``total_mv``, ``amount``, ``roe``,
             and ``total_share``, sorted by date.
         """
+
         end_date = (
             datetime.now(tz=ZoneInfo("America/New_York")).strftime("%Y%m%d")
             if not end_date
@@ -68,6 +83,15 @@ class StockDataFetcher:
         try_times = 0
         success = False
         exception = None
+
+        # there can be ts_code reuse issue, so we need to refer to the stock's list date
+        if ts_code != "":
+            if self.df_stock_list is None or self.df_stock_list.empty:
+                logger.warning("missing stock list data, please run `load_stock_list` first")
+            else:
+                stock_list_date = str(self.df_stock_list.loc[ts_code, "list_date"].item())
+                start_date = max(start_date, stock_list_date)
+
         while try_times < 3:
             try:
                 # this api returns 6000 rows in maximum; can retrieve full data through pagination
@@ -92,6 +116,7 @@ class StockDataFetcher:
             except Exception as e:
                 exception = e
                 try_times += 1
+                logger.warning(f"Fetch us_daily exception {ts_code}:{str(exception)}, retry time ${try_times}")
                 time.sleep(30)
                 continue
             else:
@@ -142,7 +167,6 @@ class StockDataFetcher:
         df = df.sort_values("trade_date").reset_index(drop=True)
         return df
 
-
     def get_stock_list_data(self, refresh:bool=False, limits:int=0) -> pd.DataFrame:
         """Fetch, merge, and save the SEC, Tushare, and stock metadata lists.
         We mainly use this for testing rather than real data collection
@@ -155,9 +179,16 @@ class StockDataFetcher:
             ``exchange``, ``sic_code``, ``industry``, ``list_date``,
             ``classify``, and ``sector``.
         """
+
+        stock_list_path = os.path.join(self.stock_list_folder, ENRICHED_STOCK_LIST_FILENAME)
+        if os.path.exists(stock_list_path) and not refresh:
+            df_full = pd.read_csv(stock_list_path)
+            if df_full is not None and not df_full.empty:
+                return df_full
+
         # check sec stock list file
-        sec_stock_list_file = self.output_folder / STOCK_LIST_FILENAME
-        if sec_stock_list_file.exists() and not refresh:
+        sec_stock_list_file = os.path.join(self.stock_list_folder, STOCK_LIST_FILENAME)
+        if os.path.exists(sec_stock_list_file) and not refresh:
             logger.info("found local stock list file")
             df_sec = pd.read_csv(sec_stock_list_file)
         else:
@@ -165,16 +196,16 @@ class StockDataFetcher:
             time.sleep(0.12) # sec has a 10 req/min limit
 
         # check tushare stock list file
-        tushare_stock_list_file = self.output_folder / STOCK_LIST_TUSHARE_FILENAME
-        if tushare_stock_list_file.exists() and not refresh:
+        tushare_stock_list_file = os.path.join(self.stock_list_folder, STOCK_LIST_TUSHARE_FILENAME)
+        if os.path.exists(tushare_stock_list_file) and not refresh:
             logger.info("found local tushare stock list file")
             df_tushare = pd.read_csv(tushare_stock_list_file)
         else:
             df_tushare = self._fetch_stock_list_tushare()
 
         # check stock metadata file
-        stock_meta_file = self.output_folder / STOCK_METADATA_FILENAME
-        if stock_meta_file.exists() and not refresh:
+        stock_meta_file = os.path.join(self.stock_list_folder, STOCK_METADATA_FILENAME)
+        if os.path.exists(stock_meta_file) and not refresh:
             logger.info("found local stock metadata file")
             df_metadata = pd.read_csv(stock_meta_file)
         else:
@@ -188,8 +219,7 @@ class StockDataFetcher:
             df_sec=df_sec,
             df_tushare=df_tushare,
             df_metadata=df_metadata)
-        output_file = self.output_folder / ENRICHED_STOCK_LIST_FILENAME
-        df_full.to_csv(output_file, index=False)
+        df_full.to_csv(stock_list_path, index=False)
         return df_full
 
 
@@ -269,8 +299,8 @@ class StockDataFetcher:
             inplace=True
         )
         # Save the DataFrame as a csv file into data/output/
-        output_file = self.output_folder / STOCK_LIST_FILENAME
-        df_sec.to_csv(output_file, index=False)
+        output_path = os.path.join(self.stock_list_folder, STOCK_LIST_FILENAME)
+        df_sec.to_csv(output_path, index=False)
         return df_sec
 
     def _fetch_stock_list_tushare(self) -> pd.DataFrame:
@@ -301,8 +331,8 @@ class StockDataFetcher:
         final_df = pd.concat(all_dfs, ignore_index=True)
         final_df.dropna(subset=["ts_code", "list_date"], inplace=True)
         final_df["list_date"] = final_df["list_date"].astype("string")
-        output_file = self.output_folder / STOCK_LIST_TUSHARE_FILENAME
-        final_df.to_csv(output_file, index=False)
+        output_path = os.path.join(self.stock_list_folder, STOCK_LIST_TUSHARE_FILENAME)
+        final_df.to_csv(output_path, index=False)
         return final_df
 
     def _fetch_all_stock_metadata(self, cik_list: list[int]) -> pd.DataFrame:
@@ -328,9 +358,8 @@ class StockDataFetcher:
             time.sleep(0.12) # sec has a 10 req/min limit
         df_metadata = pd.DataFrame(metadata_rows)
         df_metadata.rename(columns={"ticker": "ts_code"}, inplace=True)
-        output_file = self.output_folder / STOCK_METADATA_FILENAME
-        self.output_folder.mkdir(parents=True, exist_ok=True)
-        df_metadata.to_csv(output_file, index=False)
+        output_path = os.path.join(self.stock_list_folder, STOCK_METADATA_FILENAME)
+        df_metadata.to_csv(output_path, index=False)
         return df_metadata
 
     def _fetch_single_stock_metadata(self, cik: int) -> dict | None:
