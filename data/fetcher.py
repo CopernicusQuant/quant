@@ -88,8 +88,12 @@ class StockDataFetcher:
         if ts_code != "":
             if self.df_stock_list is None or self.df_stock_list.empty:
                 logger.warning("missing stock list data, please run `load_stock_list` first")
+            elif ts_code not in self.df_stock_list.index:
+                raise KeyError(
+                    f"{ts_code} not in the stock list, check either the stock list or ts_code"
+                )
             else:
-                stock_list_date = str(self.df_stock_list.loc[ts_code, "list_date"].item())
+                stock_list_date = str(self.df_stock_list.loc[ts_code, "list_date"])
                 start_date = max(start_date, stock_list_date)
 
         while try_times < 3:
