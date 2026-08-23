@@ -134,7 +134,7 @@ class StockDataStore:
             subset=["ts_code", "trade_date"],
             keep="last",
         )
-        combined_data = combined_data.sort_value(
+        combined_data = combined_data.sort_values(
             ["ts_code", "trade_date"]).reset_index(drop=True)
         # clear the whole directory
         shutil.rmtree(data_path)
@@ -145,7 +145,7 @@ class StockDataStore:
             table,
             root_path=data_path,
             partition_cols=["ts_code"],
-            comprehension="snappy",
+            compression="snappy",
             max_partitions=6000 # we have 5398 stocks so far
         )
         logger.info(f"Bulk update data: added {len(data_df)} new records, \
