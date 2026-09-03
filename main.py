@@ -7,8 +7,7 @@ logging.basicConfig(level=logging.INFO)
 
 def main():
     store = DataStore()
-    stock_list_df = store.get_stock_list()
-    print(stock_list_df.head(3))
+    store.load_stocks()
 
 
 if __name__ == "__main__":
