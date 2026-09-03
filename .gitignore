@@ -220,5 +220,6 @@ __marimo__/
 # Project-related
 config.yaml
 *.csv
+*.parquet
 data/store/
 .DS_Store
