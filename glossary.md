@@ -129,6 +129,21 @@ DEMA(t, n) = 2 × EMA(P, n) - EMA(EMA(P, n), n)
 
 DEMA is generally more responsive than EMA, but may also be more sensitive to short-term price noise. / DEMA 通常比 EMA 反应更快，但也可能对短期价格噪声更敏感。
 
+## DEMA Spread / 快慢 DEMA 差离率
+
+**English:** DEMA spread measures the relative difference between a fast DEMA and a slow DEMA. A positive value means the fast DEMA is above the slow DEMA; a negative value means it is below. A crossing of zero corresponds to a golden cross or death cross.
+
+**中文：** 快慢 DEMA 差离率衡量快速 DEMA 相对慢速 DEMA 的偏离程度。正值表示快速 DEMA 位于慢速 DEMA 上方，负值表示快速 DEMA 位于慢速 DEMA 下方；穿越零轴对应金叉或死叉。
+
+**Formula / 公式：**
+
+```text
+DEMA Spread = Fast DEMA / Slow DEMA - 1
+快慢 DEMA 差离率 = 快速 DEMA / 慢速 DEMA - 1
+```
+
+It is often displayed as a percentage: `DEMA Spread × 100%`. / 该指标通常以百分比形式展示：`DEMA Spread × 100%`。
+
 ## KAMA — Kaufman's Adaptive Moving Average / 考夫曼自适应移动平均线
 
 **English:** KAMA adjusts its smoothing rate according to market efficiency. It moves faster in a clear trend and slows down in a noisy or sideways market.

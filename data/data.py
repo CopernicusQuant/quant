@@ -73,7 +73,15 @@ class DataStore:
                 logger.info(f"{i + 1} stock files downloaded")
         logger.info("stock download completed")
 
-    def load_stocks(self, filters: tuple | None = None) -> pd.DataFrame:
+    def load_single_stock(
+        self, ts_code: str, filters: list[tuple] | None = None
+    ) -> pd.DataFrame:
+        stock_path = f"{self._local_stocks_path}/{ts_code}.parquet"
+        table = pq.read_table(stock_path, filters=filters)
+        df = table.to_pandas()
+        return df
+
+    def load_stocks(self, filters: list[tuple] | None = None) -> pd.DataFrame:
         if filters:
             dataset = pq.ParquetDataset(self._local_stocks_path, filters=filters)
         else:
