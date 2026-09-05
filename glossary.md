@@ -214,6 +214,22 @@ Histogram = diff - DEA
 
 A crossing above zero corresponds to an upward MACD/Signal crossover; a crossing below zero corresponds to a downward crossover. / 向上穿越零轴对应 MACD 线上穿信号线，向下穿越零轴对应 MACD 线下穿信号线。
 
+## Bollinger Bands / 布林带
+
+**English:** Bollinger Bands consist of a moving-average middle band and upper/lower bands set a chosen number of rolling standard deviations away. They describe price location and recent volatility.
+
+**中文：** 布林带由移动平均中轨及上下轨组成；上下轨与中轨相距指定倍数的滚动标准差，用于描述价格位置和近期波动率。
+
+**Formula / 公式：**
+
+```text
+Mid = SMA(Close, period)
+Upper = Mid + k × rolling standard deviation
+Lower = Mid - k × rolling standard deviation
+```
+
+In this project, the standard configuration is `period=20`, `k=2`, and `ddof=0`. `bb_position = (Close - Lower) / (Upper - Lower)` measures the price's band position; `bb_width = (Upper - Lower) / Mid` measures normalized band width. / 本项目默认使用 `period=20`、`k=2` 和 `ddof=0`。`bb_position` 表示价格在带内的位置，`bb_width` 表示归一化带宽。
+
 ## KAMA — Kaufman's Adaptive Moving Average / 考夫曼自适应移动平均线
 
 **English:** KAMA adjusts its smoothing rate according to market efficiency. It moves faster in a clear trend and slows down in a noisy or sideways market.
