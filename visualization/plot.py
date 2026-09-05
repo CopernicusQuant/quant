@@ -3,7 +3,7 @@ import pandas as pd
 
 
 def vis_dema(df: pd.DataFrame, fast_period: int = 20, slow_period: int = 60):
-    plot_df = df
+    plot_df = df.copy()
     plot_df["trade_date"] = pd.to_datetime(
         plot_df["trade_date"].astype(str),
         format="%Y%m%d",
@@ -76,7 +76,7 @@ def vis_dema(df: pd.DataFrame, fast_period: int = 20, slow_period: int = 60):
 
 
 def vis_macd(df: pd.DataFrame):
-    plot_df = df
+    plot_df = df.copy()
     plot_df["trade_date"] = pd.to_datetime(
         plot_df["trade_date"].astype(str),
         format="%Y%m%d",
