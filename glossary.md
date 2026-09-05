@@ -144,6 +144,76 @@ DEMA Spread = Fast DEMA / Slow DEMA - 1
 
 It is often displayed as a percentage: `DEMA Spread × 100%`. / 该指标通常以百分比形式展示：`DEMA Spread × 100%`。
 
+## MACD — Moving Average Convergence Divergence / 指数平滑异同移动平均线
+
+**English:** MACD is a momentum indicator derived from a fast and a slow EMA. It is used to evaluate the direction, strength, and change of a price trend. The common configuration uses periods 12, 26, and 9.
+
+**中文：** MACD 是由快速与慢速 EMA 构成的动量指标，用于评估价格趋势的方向、强度及其变化。常用参数组合为 12、26、9。
+
+**Formula / 公式：**
+
+```text
+MACD Line = EMA(fast) - EMA(slow)
+Signal Line = EMA(MACD Line, signal period)
+Histogram = MACD Line - Signal Line
+```
+
+In this project, `macd_diff` uses a normalized form, which is equivalent to a PPO-style relative difference. / 本项目中的 `macd_diff` 使用归一化形式，等价于 PPO 风格的相对差离率。
+
+```text
+macd_diff = (EMA(fast) - EMA(slow)) / EMA(slow)
+macd_dea = EMA(macd_diff, signal period)
+macd_hist = macd_diff - macd_dea
+```
+
+**Intuitive interpretation / 直观理解：**
+
+| 字段   | 含义                                           |
+| ------ | ---------------------------------------------- |
+| `DIFF` | 现在短期趋势相对于长期趋势有多强？             |
+| `DEA`  | 最近一段时间，`DIFF` 的正常或平滑水平是多少？  |
+| `HIST` | 现在 `DIFF` 比自身近期的正常水平更高还是更低？ |
+
+## PPO — Percentage Price Oscillator / 百分比价格振荡器
+
+**English:** PPO measures the percentage difference between a fast EMA and a slow EMA. Unlike the conventional MACD line, it is normalized by the slow EMA, which makes its values more comparable across securities or price ranges.
+
+**中文：** PPO 衡量快速 EMA 与慢速 EMA 的百分比差异。与传统 MACD 线不同，它以慢速 EMA 进行归一化，因此更适合在不同价格区间或不同证券之间比较。
+
+**Formula / 公式：**
+
+```text
+PPO = (EMA(fast) - EMA(slow)) / EMA(slow)
+```
+
+## Signal Line (DEA) / 信号线（DEA）
+
+**English:** The signal line is an EMA of the MACD line or its normalized `diff` value. It smooths short-term fluctuations and is commonly used together with the MACD line to identify momentum changes.
+
+**中文：** 信号线是 MACD 线或其归一化 `diff` 值的 EMA。它用于平滑短期波动，并通常与 MACD 线配合识别动量变化。
+
+**Formula / 公式：**
+
+```text
+DEA = EMA(diff, signal period)
+```
+
+When `diff` and `hist` are available, `dea` can be recovered as `dea = diff - hist`. / 已知 `diff` 与 `hist` 时，可通过 `dea = diff - hist` 恢复 `dea`。
+
+## MACD Histogram / MACD 柱状图
+
+**English:** The MACD histogram is the difference between the MACD line (or normalized `diff`) and its signal line. Its sign indicates relative momentum direction; changes in its magnitude indicate whether momentum is strengthening or weakening.
+
+**中文：** MACD 柱状图是 MACD 线（或归一化 `diff`）与信号线之间的差值。其正负反映相对动量方向，幅度变化反映动量正在增强或减弱。
+
+**Formula / 公式：**
+
+```text
+Histogram = diff - DEA
+```
+
+A crossing above zero corresponds to an upward MACD/Signal crossover; a crossing below zero corresponds to a downward crossover. / 向上穿越零轴对应 MACD 线上穿信号线，向下穿越零轴对应 MACD 线下穿信号线。
+
 ## KAMA — Kaufman's Adaptive Moving Average / 考夫曼自适应移动平均线
 
 **English:** KAMA adjusts its smoothing rate according to market efficiency. It moves faster in a clear trend and slows down in a noisy or sideways market.
