@@ -1,3 +1,4 @@
+import numpy as np
 import pandas as pd
 
 
@@ -31,6 +32,35 @@ def compute_dema(
     result[f"dema_{fast_period}_{slow_period}_dead"] = (
         (spread.shift(1) >= 0) & (spread < 0)
     ).astype(int)
+    return result
+
+
+def compute_bollinger_bands(
+    df: pd.DataFrame, period: int = 20, std_dev: float = 2.0
+) -> pd.DataFrame:
+    result = pd.DataFrame(index=df.index)
+    close = df["adj_close"]
+
+    mid = close.rolling(window=period).mean()
+    rolling_std = close.rolling(window=period).std(ddof=0)  # ddof=0 for population std
+
+    upper = mid + rolling_std * std_dev
+    lower = mid - rolling_std * std_dev
+    diff_ul = upper - lower
+
+    bb_width = diff_ul / mid.replace(0, np.nan)
+    bb_position = (close - lower) / diff_ul.replace(0, np.nan)
+
+    # visualization features
+    result["close"] = df["adj_close"]
+    result["trade_date"] = df["trade_date"]
+    result["bb_upper"] = upper
+    result["bb_lower"] = lower
+    result["bb_mid"] = mid
+
+    # training features
+    result["bb_width"] = bb_width
+    result["bb_position"] = bb_position
     return result
 
 
