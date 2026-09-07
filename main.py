@@ -6,8 +6,9 @@ from feature.calculator import (
     compute_dema,
     compute_kdj,
     compute_macd,
+    compute_rsi,
 )
-from visualization.plot import vis_bollinger_bands, vis_dema, vis_kdj, vis_macd
+from visualization.plot import vis_bollinger_bands, vis_dema, vis_kdj, vis_macd, vis_rsi
 
 logging.basicConfig(level=logging.INFO)
 
@@ -18,6 +19,7 @@ def main():
     stock = store.load_single_stock(
         ts_code="GOOG",
     )
+    # stock = stock.set_index(keys=["trade_date"])
     # fast_period, slow_period = 20, 120
     # result = compute_dema(stock, fast_period=fast_period, slow_period=slow_period)
     # vis_dema(result, fast_period=fast_period, slow_period=slow_period)
@@ -25,8 +27,10 @@ def main():
     # vis_macd(result)
     # result = compute_bollinger_bands(stock)
     # vis_bollinger_bands(result)
-    result = compute_kdj(stock[stock["trade_date"] > "20230101"])
-    vis_kdj(result)
+    # result = compute_kdj(stock[stock["trade_date"] > "20230101"])
+    # vis_kdj(result)
+    result = compute_rsi(stock)
+    vis_rsi(result)
 
 
 if __name__ == "__main__":
