@@ -136,3 +136,30 @@ def compute_kdj(df: pd.DataFrame, n: int = 9, m1: int = 3, m2: int = 3) -> pd.Da
     # result["kdj_d"] = d
     # result["kdj_j"] = j
     return result
+
+
+def compute_rsi(df: pd.DataFrame, periods: list[int] | None = None) -> pd.DataFrame:
+    if periods == None:
+        periods = [6, 14]  # default periods
+
+    result = pd.DataFrame(index=df.index)
+    close = df["adj_close"]
+    delta = close.diff()
+    gain = delta.where(delta > 0, 0)
+    loss = (-delta).where(delta < 0, 0)
+
+    for period in periods:
+        avg_gain = gain.ewm(alpha=1 / period, adjust=False).mean()
+        avg_loss = loss.ewm(alpha=1 / period, adjust=False).mean()
+
+        rs = avg_gain / avg_loss
+        rsi = 100 - (100 / (1 + rs))
+        result[f"rsi_{period}"] = rsi
+        result[f"rsi_{period}_over_bought"] = (rsi > 70).astype(int)
+        result[f"rsi_{period}_over_sold"] = (rsi < 30).astype(int)
+
+    # visualization features
+    result["trade_date"] = df["trade_date"]
+    result["close"] = close
+
+    return result
