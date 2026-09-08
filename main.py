@@ -6,20 +6,31 @@ from feature.calculator import (
     compute_dema,
     compute_kdj,
     compute_macd,
+    compute_obv,
     compute_rsi,
 )
-from visualization.plot import vis_bollinger_bands, vis_dema, vis_kdj, vis_macd, vis_rsi
+from visualization.plot import (
+    vis_bollinger_bands,
+    vis_dema,
+    vis_kdj,
+    vis_macd,
+    vis_obv_flow,
+    vis_rsi,
+)
 
 logging.basicConfig(level=logging.INFO)
 
 
 def main():
     store = DataStore()
+    # store.download_stocks()
     # store.load_stocks()
     stock = store.load_single_stock(
         ts_code="GOOG",
     )
-    # stock = stock.set_index(keys=["trade_date"])
+    stock = stock.set_index(keys=["trade_date"])
+    # print(stock.head(30))
+    # stock = stock[stock.index >= "20250101"]
     # fast_period, slow_period = 20, 120
     # result = compute_dema(stock, fast_period=fast_period, slow_period=slow_period)
     # vis_dema(result, fast_period=fast_period, slow_period=slow_period)
@@ -29,8 +40,10 @@ def main():
     # vis_bollinger_bands(result)
     # result = compute_kdj(stock[stock["trade_date"] > "20230101"])
     # vis_kdj(result)
-    result = compute_rsi(stock)
-    vis_rsi(result)
+    # result = compute_rsi(stock)
+    # vis_rsi(result)
+    result = compute_obv(stock)
+    vis_obv_flow(result)
 
 
 if __name__ == "__main__":
