@@ -293,3 +293,27 @@ Short MAₜ₋₁ ≥ Long MAₜ₋₁
 ```
 
 For example, a 50-day SMA crossing below a 200-day SMA is often called a death cross. Neither signal guarantees future price direction and both can lag the market. / 例如，50 日 SMA 下穿 200 日 SMA 常被称为死叉。这两类信号均不能保证未来价格方向，并且可能滞后于市场。
+
+## OBV — On-Balance Volume / 能量潮指标
+
+**English:** Traditional OBV assigns a positive or negative sign to each day's volume according to the close-to-close price direction, then cumulatively sums the signed volume. It is intended to show whether trading volume tends to confirm upward or downward price movement.
+
+**中文：** 传统 OBV 根据每日收盘价相对前一日的涨跌，为当日成交量赋予正负号，并对带方向的成交量进行累计。它用于观察成交量是否倾向于确认价格的上涨或下跌。
+
+**Formula / 公式：**
+
+```text
+SignedVolumeₜ = +Volumeₜ, if Closeₜ > Closeₜ₋₁
+                 -Volumeₜ, if Closeₜ < Closeₜ₋₁
+                  0,        if Closeₜ = Closeₜ₋₁
+
+OBVₜ = OBVₜ₋₁ + SignedVolumeₜ
+```
+
+**Project implementation / 项目实现：** This project does not output the traditional cumulative `OBV` level. It uses adjusted-close direction and computes normalized rolling signed-volume flow strength instead: / 本项目不输出传统累计 `OBV` 水平值，而是使用复权收盘价判断方向，并计算归一化的滚动方向成交量流强度：
+
+```text
+obv_flow_strength(n) = Σ SignedVolume / Σ Volume
+```
+
+`obv_flow_strength_5` and `obv_flow_strength_20` measure 5- and 20-day directional volume strength. Their normal range is `[-1, 1]`: positive values indicate volume is more concentrated on up days, while negative values indicate volume is more concentrated on down days. `obv_strength_accel_5_20 = obv_flow_strength_5 - obv_flow_strength_20` measures the difference between short- and medium-term strength. / `obv_flow_strength_5` 与 `obv_flow_strength_20` 分别衡量 5 日和 20 日的方向性成交量强度，正常范围为 `[-1, 1]`：正值表示成交量更集中于上涨日，负值表示更集中于下跌日。`obv_strength_accel_5_20` 为两者之差，用于衡量短期相对中短期的强度变化。

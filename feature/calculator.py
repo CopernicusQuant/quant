@@ -163,3 +163,31 @@ def compute_rsi(df: pd.DataFrame, periods: list[int] | None = None) -> pd.DataFr
     result["close"] = close
 
     return result
+
+
+def compute_obv(df: pd.DataFrame) -> pd.DataFrame:
+    result = pd.DataFrame(index=df.index)
+    close = df["adj_close"]
+    volume = df["adj_vol"]
+
+    delta = close.diff()
+    signed_volume = volume.where(delta > 0, -volume.where(delta < 0, 0))
+    signed_volume.iloc[0] = (
+        0  # set the first day as zero to avoid any wrong gain/loss sign
+    )
+
+    flow_5 = signed_volume.rolling(5, min_periods=5).sum()
+    flow_20 = signed_volume.rolling(20, min_periods=20).sum()
+
+    result["close"] = close
+
+    # model features
+    result["obv_flow_strength_5"] = flow_5 / volume.rolling(5, min_periods=5).sum()
+    result["obv_flow_strength_20"] = flow_20 / volume.rolling(20, min_periods=20).sum()
+
+    # between [2, -2]
+    result["obv_strength_accel_5_20"] = (
+        result["obv_flow_strength_5"] - result["obv_flow_strength_20"]
+    )
+
+    return result
