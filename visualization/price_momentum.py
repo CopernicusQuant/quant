@@ -1,4 +1,3 @@
-import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
 import pandas as pd
 from matplotlib.ticker import PercentFormatter
@@ -7,7 +6,7 @@ from matplotlib.ticker import PercentFormatter
 def vis_price_momentum(
     price_df: pd.DataFrame,
     momentum_df: pd.DataFrame,
-    periods: tuple[int, ...] = (5, 10, 20, 60, 120),
+    periods: tuple[int, ...] = (5, 10, 20, 60),
 ):
     plot_df = momentum_df.copy()
     plot_df["close"] = price_df["adj_close"]
@@ -17,6 +16,7 @@ def vis_price_momentum(
         plot_df.index.astype(str),
         format="%Y%m%d",
     )
+    x = range(len(plot_df))
 
     fig, (ax_price, ax_bias, ax_return, ax_breadth) = plt.subplots(
         4,
@@ -28,7 +28,7 @@ def vis_price_momentum(
 
     # Price and moving averages
     ax_price.plot(
-        plot_df["trade_date"],
+        x,
         plot_df["close"],
         color="black",
         linewidth=1.4,
@@ -37,7 +37,7 @@ def vis_price_momentum(
     )
     for period in periods:
         ax_price.plot(
-            plot_df["trade_date"],
+            x,
             plot_df[f"ma_{period}"],
             linewidth=1,
             alpha=0.85,
@@ -53,7 +53,7 @@ def vis_price_momentum(
     display_periods = [p for p in (5, 20, 60) if p in periods]
     for period in display_periods:
         ax_bias.plot(
-            plot_df["trade_date"],
+            x,
             plot_df[f"ma_{period}_bias"],
             linewidth=1.2,
             label=f"Bias vs MA {period}",
@@ -72,7 +72,7 @@ def vis_price_momentum(
         colors = values.ge(0).map({True: "tab:green", False: "tab:red"})
 
         ax_return.bar(
-            plot_df["trade_date"],
+            x,
             values,
             width=1.0,
             alpha=0.28 if period == 20 else 0.6,
@@ -88,14 +88,14 @@ def vis_price_momentum(
 
     # Breadth of daily upward closes
     ax_breadth.plot(
-        plot_df["trade_date"],
+        x,
         plot_df["up_ratio_5d"],
         color="tab:blue",
         linewidth=1.3,
         label="Up-day ratio (5d)",
     )
     ax_breadth.plot(
-        plot_df["trade_date"],
+        x,
         plot_df["up_ratio_20d"],
         color="tab:orange",
         linewidth=1.3,
@@ -110,7 +110,7 @@ def vis_price_momentum(
         label="50%",
     )
     ax_breadth.fill_between(
-        plot_df["trade_date"],
+        x,
         0.5,
         plot_df["up_ratio_20d"],
         where=plot_df["up_ratio_20d"].ge(0.5),
@@ -118,7 +118,7 @@ def vis_price_momentum(
         alpha=0.08,
     )
     ax_breadth.fill_between(
-        plot_df["trade_date"],
+        x,
         0.5,
         plot_df["up_ratio_20d"],
         where=plot_df["up_ratio_20d"].lt(0.5),
@@ -133,9 +133,12 @@ def vis_price_momentum(
     ax_breadth.legend(ncol=3, fontsize=9)
     ax_breadth.grid(alpha=0.25)
 
-    locator = mdates.AutoDateLocator(minticks=5, maxticks=10)
-    ax_breadth.xaxis.set_major_locator(locator)
-    ax_breadth.xaxis.set_major_formatter(mdates.ConciseDateFormatter(locator))
-
+    step = max(1, len(plot_df) // 10)
+    ticks = list(range(0, len(plot_df), step))
+    ax_breadth.set_xticks(ticks)
+    ax_breadth.set_xticklabels(
+        plot_df["trade_date"].dt.strftime("%Y-%m-%d").iloc[ticks],
+        rotation=45,
+    )
     fig.tight_layout()
     plt.show()

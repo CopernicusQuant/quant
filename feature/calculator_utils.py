@@ -33,9 +33,6 @@ def compute_price_momentum(
     including `ma_{period}`, `ma_{period}_bias`, `ma_{short}_{long}_ratio` `return_{period}d`
     `raise_days`, `fall_days`, `up_ratio_5d`, `up_ratio_20d`
 
-    visualization-only features:
-
-
     Args:
         df: single stock data, with index of trade_date
         periods: a list of periods, sorted increasingly. Normally ignore this param except really need
@@ -43,13 +40,7 @@ def compute_price_momentum(
         pd.DataFrame of calculated features
     """
     if periods is None:
-        periods = [
-            5,
-            10,
-            20,
-            60,
-            120,
-        ]
+        periods = [5, 10, 20, 60]
     result = pd.DataFrame(index=df.index)
     close = df["adj_close"]
     for period in periods:
@@ -71,6 +62,35 @@ def compute_price_momentum(
     )
     result["up_ratio_5d"] = status.eq(1).rolling(window=5, min_periods=5).mean()
     result["up_ratio_20d"] = status.eq(1).rolling(window=20, min_periods=20).mean()
+    return result
+
+
+def compute_volume_momentum(df: pd.DataFrame, periods: list[int] | None = None):
+    """
+    Calculate volume change features
+    including `vol_ma_{period}`, `vol_ma_{period}_bias`, `vol_change_{perido}d`
+    `vol_ma_{short}_{long}_ratio`
+
+    Args:
+        df: single stock data, with index of trade_date
+        periods: a list of periods, sorted increasingly. Normally ignore this param except really need
+    Returns:
+        pd.DataFrame of calculated features
+    """
+    if periods is None:
+        periods = [5, 10, 20, 60]
+    result = pd.DataFrame(index=df.index)
+    volume = df["adj_vol"]
+    for period in periods:
+        ma = volume.rolling(window=period, min_periods=1).mean()
+        result[f"vol_ma_{period}"] = ma
+        result[f"vol_ma_{period}_bias"] = (volume - ma) / ma
+        result[f"vol_change_{period}d"] = volume / volume.shift(period) - 1
+
+    for short, long in itertools.pairwise(periods):
+        result[f"vol_ma_{short}_{long}_ratio"] = (
+            result[f"vol_ma_{short}"] / result[f"vol_ma_{long}"]
+        )
     return result
 
 
