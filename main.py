@@ -1,12 +1,14 @@
 import logging
 
 from data import DataStore
-from feature.calculator import (
+from feature.calculator_utils import (
+    combine_stock_basics,
     compute_bollinger_bands,
     compute_dema,
     compute_kdj,
     compute_macd,
     compute_obv,
+    compute_price_momentum,
     compute_rsi,
 )
 from visualization.plot import (
@@ -17,6 +19,7 @@ from visualization.plot import (
     vis_obv_flow,
     vis_rsi,
 )
+from visualization.price_momentum import vis_price_momentum
 
 logging.basicConfig(level=logging.INFO)
 
@@ -26,24 +29,14 @@ def main():
     # store.download_stocks()
     # store.load_stocks()
     stock = store.load_single_stock(
-        ts_code="GOOG",
+        ts_code="AAPL",
     )
-    stock = stock.set_index(keys=["trade_date"])
-    # print(stock.head(30))
-    # stock = stock[stock.index >= "20250101"]
-    # fast_period, slow_period = 20, 120
-    # result = compute_dema(stock, fast_period=fast_period, slow_period=slow_period)
-    # vis_dema(result, fast_period=fast_period, slow_period=slow_period)
-    # result = compute_macd(stock)
-    # vis_macd(result)
-    # result = compute_bollinger_bands(stock)
-    # vis_bollinger_bands(result)
-    # result = compute_kdj(stock[stock["trade_date"] > "20230101"])
-    # vis_kdj(result)
-    # result = compute_rsi(stock)
-    # vis_rsi(result)
-    result = compute_obv(stock)
-    vis_obv_flow(result)
+    # info = store.get_stock_list()
+    # stock_info = info[info["ts_code"] == "GOOG"]
+    # result = combine_stock_basics(stock_data_df=stock, stock_info_df=stock_info)
+    stock.set_index("trade_date", inplace=True)
+    result = compute_price_momentum(stock)
+    vis_price_momentum(stock, result[result.index >= "20250910"])
 
 
 if __name__ == "__main__":
