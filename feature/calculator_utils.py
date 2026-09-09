@@ -1,5 +1,77 @@
+import itertools
+
 import numpy as np
 import pandas as pd
+
+
+def combine_stock_basics(stock_data_df: pd.DataFrame, stock_info_df: pd.DataFrame):
+    """
+    Gather all of the basic data from the original, unmodified dataset.
+    selected fields from stock_data_df: ts_code, trade_date, turnover, pb, pe, roe
+    selected fields from stock_info_df: sub_industry
+    output columns: ts_code, trade_date, turnover, industry
+
+    Args:
+        stock_data_df: single stock's raw data
+        stock_info_df: single stock's info dataframe
+    Returns:
+        combined data frame
+    """
+    result = stock_data_df[
+        ["ts_code", "trade_date", "turnover", "pb", "pe", "roe"]
+    ].copy()
+    result["industry"] = stock_info_df["sub_industry"].iloc[0]
+    result.set_index("trade_date", inplace=True)
+    return result
+
+
+def compute_price_momentum(
+    df: pd.DataFrame, periods: list[int] | None = None
+) -> pd.DataFrame:
+    """
+    Calculate price change related features,
+    including `ma_{period}`, `ma_{period}_bias`, `ma_{short}_{long}_ratio` `return_{period}d`
+    `raise_days`, `fall_days`, `up_ratio_5d`, `up_ratio_20d`
+
+    visualization-only features:
+
+
+    Args:
+        df: single stock data, with index of trade_date
+        periods: a list of periods, sorted increasingly. Normally ignore this param except really need
+    Returns:
+        pd.DataFrame of calculated features
+    """
+    if periods is None:
+        periods = [
+            5,
+            10,
+            20,
+            60,
+            120,
+        ]
+    result = pd.DataFrame(index=df.index)
+    close = df["adj_close"]
+    for period in periods:
+        ma = close.rolling(window=period, min_periods=1).mean()
+        result[f"ma_{period}"] = (
+            ma  # ma will not be in the feature colletion, it will be used for calculation or data visualization
+        )
+        result[f"ma_{period}_bias"] = (close - ma) / ma
+        result[f"return_{period}d"] = close / close.shift(period) - 1
+    for short, long in itertools.pairwise(periods):
+        result[f"ma_{short}_{long}_ratio"] = (
+            result[f"ma_{short}"] / result[f"ma_{long}"]
+        )
+
+    # Count consecutive up/down closes. A flat close breaks either streak.
+    delta = close.diff()
+    status = pd.Series(
+        np.where(delta > 0, 1, np.where(delta < 0, -1, 0)), index=df.index
+    )
+    result["up_ratio_5d"] = status.eq(1).rolling(window=5, min_periods=5).mean()
+    result["up_ratio_20d"] = status.eq(1).rolling(window=20, min_periods=20).mean()
+    return result
 
 
 def compute_dema(
