@@ -63,4 +63,7 @@ FEATURE_META_COLLECTION = {
     "activity_score_60": FeatureMeta(neutralize=True),
     "thin_trade_amplitude_score_60": FeatureMeta(neutralize=True),
     "turnover_without_move_score_60": FeatureMeta(neutralize=True),
+    # ./calculator_utils/compute_volatility
+    "volatility_log": FeatureMeta(winsorize=True, neutralize=True),
+    "volatility_rank": FeatureMeta(neutralize=True),
 }
