@@ -94,6 +94,53 @@ def compute_volume_momentum(df: pd.DataFrame, periods: list[int] | None = None):
     return result
 
 
+def compute_activity_features(
+    df: pd.DataFrame, periods: list[int] | None = None, quantile_period: int = 60
+) -> pd.DataFrame:
+    if periods is None:
+        periods = [5, 20]
+    high = df["adj_high"]
+    low = df["adj_low"]
+    close = df["adj_close"]
+    turnover = df["turnover"]
+    prev_close = close.shift(1)
+    result = pd.DataFrame(index=df.index)
+
+    amplitude = (high - low) / prev_close.where(prev_close > 0)
+    result["amplitude"] = amplitude
+
+    for period in periods:
+        result[f"amplitude_ma_{period}"] = amplitude.rolling(
+            window=period, min_periods=1
+        ).mean()
+
+        turnover_ma = turnover.rolling(window=period, min_periods=1).mean()
+        result[f"turnover_ma_{period}_bias"] = (
+            turnover / turnover_ma.clip(lower=1e-6) - 1
+        )
+    amplitude_quantile = amplitude.rolling(window=quantile_period, min_periods=40).rank(
+        pct=True
+    )
+    turnover_quantile = turnover.rolling(window=quantile_period, min_periods=40).rank(
+        pct=True
+    )
+    result[f"amplitude_quantile_{quantile_period}"] = amplitude_quantile
+    result[f"turnover_quantile_{quantile_period}"] = turnover_quantile
+
+    # high intraday range and high turnover: active trading with elevated price dispersion.
+    result[f"activity_score_{quantile_period}"] = amplitude_quantile * turnover_quantile
+    # high intraday range and low turnover: a large price move occurring on relatively light trading.
+    result[f"thin_trade_amplitude_score_{quantile_period}"] = amplitude_quantile * (
+        1 - turnover_quantile
+    )
+    # low intraday range and high turnover: heavy trading activity with limited price movement.
+    result[f"turnover_without_move_score_{quantile_period}"] = (
+        1 - amplitude_quantile
+    ) * turnover_quantile
+
+    return result
+
+
 def compute_dema(
     df: pd.DataFrame, fast_period: int = 20, slow_period: int = 60
 ) -> pd.DataFrame:

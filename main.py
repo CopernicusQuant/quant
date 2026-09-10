@@ -10,7 +10,8 @@ from feature.calculator_utils import (
     # compute_macd,
     # compute_obv,
     # compute_price_momentum,
-    compute_volume_momentum,
+    # compute_volume_momentum,
+    compute_activity_features,
 )
 
 # from visualization.plot import (
@@ -22,7 +23,8 @@ from feature.calculator_utils import (
 # vis_rsi,
 # )
 # from visualization.price_momentum import vis_price_momentum
-from visualization.volume_momentum import vis_volume_momentum
+# from visualization.volume_momentum import vis_volume_momentum
+from visualization.activity import vis_activity_features
 
 logging.basicConfig(level=logging.INFO)
 
@@ -38,10 +40,14 @@ def main():
     # stock_info = info[info["ts_code"] == "GOOG"]
     # result = combine_stock_basics(stock_data_df=stock, stock_info_df=stock_info)
     stock.set_index("trade_date", inplace=True)
+    result = compute_activity_features(stock)
+    vis_activity_features(stock, result)
+
+    # print(stock.head(20))
     # result = compute_price_momentum(stock)
     # vis_price_momentum(stock, result[result.index >= "20250810"])
-    result = compute_volume_momentum(stock)
-    vis_volume_momentum(stock, result[result.index >= "20250910"])
+    # result = compute_volume_momentum(stock)
+    # vis_volume_momentum(stock, result[result.index >= "20250910"])
 
 
 if __name__ == "__main__":

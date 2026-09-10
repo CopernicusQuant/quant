@@ -21,8 +21,8 @@ FEATURE_META_COLLECTION = {
     # ./calculator_utils/combine_stock_basics
     "ts_code": FeatureMeta(categorical=True),
     "trade_date": FeatureMeta(categorical=True),
-    "turnover": FeatureMeta(neutralize=True),
     "industry": FeatureMeta(categorical=True),
+    "turnover": FeatureMeta(winsorize=True, neutralize=True),
     "pb": FeatureMeta(winsorize=True, neutralize=True),
     "pe": FeatureMeta(winsorize=True, neutralize=True),
     "roe": FeatureMeta(winsorize=True, neutralize=True),
@@ -52,4 +52,15 @@ FEATURE_META_COLLECTION = {
     "vol_ma_5_10_ratio": FeatureMeta(winsorize=True, neutralize=True),
     "vol_ma_10_20_ratio": FeatureMeta(winsorize=True, neutralize=True),
     "vol_ma_20_60_ratio": FeatureMeta(winsorize=True, neutralize=True),
+    # ./calculator_utils/compute_activity_features
+    "amplitude": FeatureMeta(winsorize=True, neutralize=True),
+    "amplitude_ma_5": FeatureMeta(winsorize=True, neutralize=True),
+    "amplitude_ma_20": FeatureMeta(winsorize=True, neutralize=True),
+    "amplitude_quantile_60": FeatureMeta(neutralize=True),
+    "turnover_ma_5_bias": FeatureMeta(winsorize=True, neutralize=True),
+    "turnover_ma_20_bias": FeatureMeta(winsorize=True, neutralize=True),
+    "turnover_quantile_60": FeatureMeta(neutralize=True),
+    "activity_score_60": FeatureMeta(neutralize=True),
+    "thin_trade_amplitude_score_60": FeatureMeta(neutralize=True),
+    "turnover_without_move_score_60": FeatureMeta(neutralize=True),
 }
