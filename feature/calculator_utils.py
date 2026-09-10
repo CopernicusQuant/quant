@@ -97,6 +97,21 @@ def compute_volume_momentum(df: pd.DataFrame, periods: list[int] | None = None):
 def compute_activity_features(
     df: pd.DataFrame, periods: list[int] | None = None, quantile_period: int = 60
 ) -> pd.DataFrame:
+    """
+    Calculate market activity related features
+    raw or smoothed features: `amplitude`, `amplitude_ma_{period}`, `turnover_ma_{period}_bias`,
+    quantile features: `amplitude_quantile_{quantile_period}`, `turnover_quantile_{quantile_period}`
+    market activity scores:
+    `activity_score_{quantile_period}`, `thin_trade_amplitude_score_{quantile_period},
+    `turnover_without_move_score_{quantile_period}`
+
+    Args:
+        df: single stock data, with index of `trade_date`
+        periods: a list of periods, should sorted increasingly
+        quantile_period: an integer period(window) for the quantile feature
+    Returns:
+        pd.DataFrame of calculated features
+    """
     if periods is None:
         periods = [5, 20]
     high = df["adj_high"]
@@ -138,6 +153,29 @@ def compute_activity_features(
         1 - amplitude_quantile
     ) * turnover_quantile
 
+    return result
+
+
+def compute_volatility(
+    df: pd.DataFrame, window: int = 20, rank_period: int = 60
+) -> pd.DataFrame:
+    """
+    Calculate single stock's volatility, to detect risks
+    features: `volatility_log`, `volatility_rank`
+
+    Args:
+        df: single stock data
+    Returns:
+        pd.DataFrame with features
+    """
+    result = pd.DataFrame(index=df.index)
+    close = df["adj_close"]
+    returns = close.pct_change()
+    volatility = returns.rolling(window=window).std()
+    result["volatility_log"] = np.log(
+        volatility + 1e-8
+    )  # add 1e-8 to prevent log(0) = -inf
+    result["volatility_rank"] = volatility.rolling(window=rank_period).rank(pct=True)
     return result
 
 
