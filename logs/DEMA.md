@@ -4,14 +4,7 @@
 
 对于 LightGBM 日频量化特征，DEMA 应主要作为**趋势状态的连续描述**，而不是仅作为金叉、死叉交易规则。
 
-第一版建议使用：
-
-```python
-spread = dema_fast / dema_slow - 1
-
-result["dema_20_60_spread"] = spread
-result["dema_20_60_spread_change_5d"] = spread.diff(5)
-```
+第一版以快慢 DEMA 的相对偏离作为核心特征，并可选加入其 5 日变化量。
 
 其中：
 
@@ -19,7 +12,7 @@ result["dema_20_60_spread_change_5d"] = spread.diff(5)
 | ----------------------------- | -------------------- | ---------------------- |
 | `dema_20_60_spread`           | 当前趋势状态与强度   | 是                     |
 | `dema_20_60_spread_change_5d` | 趋势增强或减弱的速度 | 可选                   |
-| `dema_gold` / `dema_dead`     | 离散的交叉事件       | 否，可用于可视化或研究 |
+| `dema_gold` / `dema_dead`     | 离散的交叉事件       | 否，可用于研究 |
 
 ---
 
@@ -45,13 +38,6 @@ $$
 spread_t = \frac{DEMA_{fast,t}}{DEMA_{slow,t}} - 1
 $$
 
-对应实现：
-
-```python
-spread = dema_fast / dema_slow - 1
-result["dema_spread"] = spread
-```
-
 `spread` 的含义如下：
 
 | 状态             | 含义                         |
@@ -70,28 +56,7 @@ result["dema_spread"] = spread
 
 ### 金叉与死叉的局限
 
-金叉、死叉可定义为：
-
-```python
-dema_gold = (
-    (dema_fast.shift(1) < dema_slow.shift(1))
-    & (dema_fast > dema_slow)
-).astype(int)
-
-dema_dead = (
-    (dema_fast.shift(1) > dema_slow.shift(1))
-    & (dema_fast < dema_slow)
-).astype(int)
-```
-
-它们是事件型二元特征。例如：
-
-```text
-Day 1: fast < slow
-Day 2: fast > slow   → gold = 1
-Day 3: fast > slow   → gold = 0
-Day 4: fast > slow   → gold = 0
-```
+金叉、死叉是快线相对慢线发生方向切换时的事件型二元特征。
 
 模型只能识别 Day 2 发生过金叉，无法从该信号中判断交叉后的趋势强度、持续时间或趋势变化速度。
 
@@ -107,19 +72,7 @@ spread > 0
 DEMA_{fast} > DEMA_{slow}
 $$
 
-基于 `spread` 的金叉定义：
-
-```python
-(spread.shift(1) <= 0) & (spread > 0)
-```
-
-与直接比较快、慢 DEMA 的定义：
-
-```python
-(dema_fast.shift(1) <= dema_slow.shift(1)) & (dema_fast > dema_slow)
-```
-
-在含义上几乎等价。差异仅在于是否将前一期刚好相等视为交叉；对浮点价格数据而言，这一差异通常很小。
+无论以 `spread` 穿越零轴还是直接比较快、慢 DEMA 来定义金叉，含义都几乎等价。差异仅在于是否将前一期刚好相等视为交叉；对浮点价格数据而言，这一差异通常很小。
 
 因此，没有必要为了检测金叉而特意将逻辑改写为 `spread`。`spread` 的主要价值在于作为连续特征输入模型。
 
@@ -127,11 +80,7 @@ $$
 
 ## Spread Change：趋势变化速度
 
-除当前趋势状态外，可使用 `spread` 的变化量表示趋势正在增强还是减弱：
-
-```python
-result["dema_spread_change_5d"] = spread.diff(5)
-```
+除当前趋势状态外，`spread` 的变化量还可表示趋势正在增强还是减弱。
 
 其计算形式为：
 
@@ -148,15 +97,7 @@ $$
 | `-3%`    |              `-2%` | 当前为空头趋势，且趋势正在增强   |
 | `-3%`    |              `+2%` | 当前仍为空头趋势，但趋势正在减弱 |
 
-特征分工如下：
-
-```text
-spread
-→ 当前趋势状态与强度
-
-spread_change
-→ 趋势变化速度
-```
+`spread` 描述当前趋势状态与强度，`spread_change` 描述趋势变化速度。
 
 `dema_spread_change_5d` 是可选增强特征，而非第一版的必要输入。是否保留应通过样本外 ablation test 验证。
 
@@ -164,57 +105,26 @@ spread_change
 
 ## 缺失值与 Warm-up Period
 
-调用：
+计算 5 日变化量会使前 5 行产生 `NaN`。这是因为这些时间点没有可用于计算 $t-5$ 的历史数据。
 
-```python
-spread.diff(5)
-```
-
-会使前 5 行产生 `NaN`。这是因为这些时间点没有可用于计算 $t-5$ 的历史数据。
-
-不建议使用：
-
-```python
-fillna(0)
-```
-
-原因是两者含义不同：
+不建议用 `0` 填补这类缺失值，原因是两者含义不同：
 
 | 值    | 含义                        |
 | ----- | --------------------------- |
 | `0`   | 过去 5 天 `spread` 没有变化 |
 | `NaN` | 历史数据不足，无法计算      |
 
-LightGBM 可以原生处理缺失值。实践中，指标系统通常在所有特征计算完成后统一移除 warm-up period，例如：
-
-```python
-WARMUP_DAYS = 250
-```
-
-因此，`diff(5)` 产生的初始缺失值通常不会影响最终训练样本。
+LightGBM 可以原生处理缺失值。实践中，指标系统通常在所有特征计算完成后统一移除 warm-up period，因此，`diff(5)` 产生的初始缺失值通常不会影响最终训练样本。
 
 ---
 
 ## DEMA 窗口选择
 
-对于预测未来约 20 个交易日收益的日频系统，`DEMA(20, 60)` 是合理的基准组合：
-
-```text
-20 日 ≈ 1 个交易月
-60 日 ≈ 1 个季度
-```
+对于预测未来约 20 个交易日收益的日频系统，`DEMA(20, 60)` 是合理的基准组合：20 日约为一个交易月，60 日约为一个季度。
 
 这两个窗口具有明确且不同的市场时间尺度。
 
-不建议在初始阶段密集搜索高度相近的参数，例如：
-
-```text
-20 / 50
-20 / 55
-20 / 60
-20 / 65
-20 / 70
-```
+不建议在初始阶段密集搜索高度相近的参数组合。
 
 这些组合之间通常高度相关，容易造成参数过拟合，而不一定带来独立信息。
 
@@ -224,43 +134,19 @@ WARMUP_DAYS = 250
 
 ### 第一版：单组 DEMA
 
-建议先使用单组 20 / 60：
-
-```python
-dema_20_60_spread
-dema_20_60_spread_change_5d
-```
+建议先使用单组 20 / 60，并验证其自身的增量预测能力。
 
 首先验证 DEMA 特征家族本身是否具有增量样本外预测能力。
 
 ### 后续扩展：不同时间尺度
 
-如需引入多组 DEMA，应选择明显不同的时间尺度：
-
-```text
-10 / 20
-→ 短期趋势
-
-20 / 60
-→ 中期趋势
-
-60 / 200
-→ 长期趋势
-```
+如需引入多组 DEMA，应选择明显不同的短、中、长期时间尺度。
 
 应避免仅增加多个相近参数组合。
 
 ### 多组特征的训练方式
 
-若保留多组 DEMA，应将它们作为不同输入特征同时送入同一个 LightGBM 模型：
-
-```python
-features = [
-    "dema_10_20_spread",
-    "dema_20_60_spread",
-    "dema_60_200_spread",
-]
-```
+若保留多组 DEMA，应将它们作为不同输入特征同时送入同一个 LightGBM 模型。
 
 模型可自行学习：
 
@@ -276,70 +162,19 @@ features = [
 
 ### 第一阶段
 
-```python
-dema_20_60_spread
-```
+仅使用 20 / 60 的趋势状态特征。
 
 ### 第二阶段
 
-```python
-dema_20_60_spread
-dema_20_60_spread_change_5d
-```
+在样本外验证后加入趋势变化速度。
 
 ### 第三阶段
 
-在 walk-forward ablation 验证存在增量价值后，再考虑增加明显不同的趋势尺度：
-
-```python
-dema_20_60_spread
-dema_20_60_spread_change_5d
-dema_60_200_spread
-```
+在 walk-forward ablation 验证存在增量价值后，再考虑增加明显不同的趋势尺度。
 
 ---
 
-## 验证与可视化建议
-
-### 价格与 DEMA 曲线
-
-用于基础计算校验：
-
-```text
-Price
-DEMA fast
-DEMA slow
-Gold / Dead marker
-```
-
-重点确认快慢线关系及 crossover 的计算是否正确。
-
-### DEMA Spread 时间序列
-
-绘制：
-
-```text
-dema_spread
-y = 0
-```
-
-可直观验证：
-
-```text
-spread > 0  → fast DEMA 位于 slow DEMA 上方
-spread < 0  → fast DEMA 位于 slow DEMA 下方
-cross 0     → crossover
-```
-
-### Spread 分组与未来收益
-
-每天在股票横截面上按 `spread` 分组，例如分为十组：
-
-```text
-Q1 ... Q10
-```
-
-随后比较各组未来 20 日平均超额收益。若收益与 `spread` 存在较稳定的单调关系，则该特征可能具有预测能力。
+## 验证建议
 
 ### Yearly Rank IC
 
@@ -351,25 +186,23 @@ Q1 ... Q10
 
 ## 推荐特征集合
 
-当前最适合作为第一版的 DEMA 设计为：
-
-```python
-spread = dema_fast / dema_slow - 1
-
-result["dema_20_60_spread"] = spread
-result["dema_20_60_spread_change_5d"] = spread.diff(5)
-```
-
-推荐的角色划分：
-
-```text
-DEMA
-- dema_20_60_spread: 当前趋势状态与强度
-- dema_20_60_spread_change_5d: 可选的趋势加速度特征
-
-Gold / Dead
-- 用于可视化或研究
-- 不一定需要输入 LightGBM
-```
+当前最适合作为第一版的 DEMA 设计是以 `dema_20_60_spread` 表示趋势状态，以 `dema_20_60_spread_change_5d` 表示可选的趋势变化速度。
 
 整体原则是：优先使用连续的趋势状态特征，让 LightGBM 学习何时以及如何利用这些信息；避免将可连续表达的信息过早压缩为金叉、死叉等二元交易信号。
+
+---
+
+## 常见解读与阈值
+
+下表的区间与事件用于描述指标状态，是研究参照而非独立的交易指令。
+
+| DEMA 状态或事件 | 常见解读 |
+| --- | --- |
+| 短期 DEMA 高于长期 DEMA | 短中期趋势偏强。 |
+| 短期 DEMA 低于长期 DEMA | 短中期趋势偏弱。 |
+| `dema_spread` 扩大 | 趋势强度可能增强。 |
+| `dema_spread` 收窄或变号 | 趋势可能减弱或发生转换。 |
+| `dema_spread` 接近零轴 | 快慢趋势接近，方向优势有限，容易受震荡影响。 |
+| `dema_spread_change_5d` 与方向同向 | 当前趋势的强度可能正在延续或增强。 |
+
+均线交叉存在滞后和震荡市假信号，应结合价格波动与样本外结果验证。

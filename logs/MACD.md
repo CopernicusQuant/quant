@@ -46,20 +46,9 @@ $$
 
 ## 20 / 60 参数的适用场景
 
-MACD 20 / 60 更适合较长预测周期的目标，例如：
+MACD 20 / 60 更适合 10 至 20 个交易日左右的较长预测周期。
 
-```text
-未来 10 个交易日收益
-未来 20 个交易日收益
-```
-
-对于较短的预测 horizon，例如：
-
-```text
-未来 1 日收益
-未来 3 日收益
-未来 5 日收益
-```
+对于 1 至 5 个交易日的较短预测周期，
 
 20 / 60 往往响应偏慢，特别是 EMA60 对近期价格变化的权重较低。
 
@@ -95,56 +84,21 @@ $$
 
 对于 LightGBM，连续变量通常比人工离散化的金叉、死叉信号包含更多信息。
 
-建议优先保留：
+建议优先保留连续的 `macd_diff`、`macd_hist` 及其短期变化率。
 
-```text
-macd_diff
-macd_hist
-macd_hist_change_3d
-macd_hist_change_5d
-```
-
-其中，`macd_hist_change` 可以区分相同柱状图水平下的不同动量状态：
-
-```text
-hist = +0.01，快速上升
-hist = +0.01，快速下降
-hist = +0.01，基本横盘
-```
+其中，`macd_hist_change` 可以区分相同柱状图水平下的不同动量状态，例如上升、下降或横盘。
 
 ### 不建议优先使用金叉/死叉特征
 
-金叉和死叉通常可由 MACD 柱状图穿越零轴表达：
+金叉和死叉通常可由 MACD 柱状图穿越零轴表达。
 
-```python
-macd_gold = (
-    (macd_hist.shift(1) < 0) &
-    (macd_hist > 0)
-)
-```
-
-其本质是将连续变化：
-
-```text
--0.001 → +0.002
-```
-
-离散为：
-
-```text
-gold = 1
-```
+其本质是将连续变化压缩为二元事件。
 
 这会丢失交叉前后的幅度、速度和持续性等信息。因此，`macd_gold` 和 `macd_dead` 的优先级低于 `macd_hist` 及其变化率特征。
 
 ### `dea` 的冗余性
 
-若模型已包含：
-
-```text
-macd_diff
-macd_hist
-```
+若模型已包含 `macd_diff` 与 `macd_hist`，
 
 则 `dea` 可以由以下关系恢复：
 
@@ -158,34 +112,25 @@ $$
 
 ## 推荐实现
 
-```python
-ema_fast = close.ewm(span=12, adjust=False).mean()
-ema_slow = close.ewm(span=26, adjust=False).mean()
-
-diff = (ema_fast - ema_slow) / ema_slow
-dea = diff.ewm(span=9, adjust=False).mean()
-hist = diff - dea
-
-result["macd_diff"] = diff
-result["macd_hist"] = hist
-result["macd_hist_change_3d"] = hist.diff(3)
-result["macd_hist_change_5d"] = hist.diff(5)
-```
-
 ---
 
 ## 推荐特征集合
 
-```text
-DEMA
-- dema_spread_20_60
-- dema_spread_change
-
-MACD / PPO
-- macd_diff_12_26
-- macd_hist_12_26_9
-- macd_hist_change_3d
-- macd_hist_change_5d
-```
-
 该设计以 DEMA 20 / 60 表示中期趋势结构，以 MACD 12 / 26 / 9 补充较短周期的动量及其变化，在特征信息量和特征正交性之间取得较平衡的结果。
+
+---
+
+## 常见解读与阈值
+
+下表的区间与事件用于描述指标状态，是研究参照而非独立的交易指令。
+
+| MACD 状态或事件 | 常见解读 |
+| --- | --- |
+| `dif` 高于 `dea` | 短期动量相对偏强。 |
+| `dif` 低于 `dea` | 短期动量相对偏弱。 |
+| MACD 位于零轴上方 | 中期趋势背景通常偏强。 |
+| MACD 位于零轴下方 | 中期趋势背景通常偏弱。 |
+| 柱状图由负转正 | 快慢动量差转强，可作为趋势改善的候选事件。 |
+| 柱状图由正转负 | 快慢动量差转弱，可作为趋势减弱的候选事件。 |
+
+零轴和交叉具有滞后性，在震荡市场中更容易产生噪声，应做样本外验证。
