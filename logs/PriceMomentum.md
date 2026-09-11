@@ -12,7 +12,7 @@
 | 快慢均线比 | `ma_{short}_{long}_ratio` | 不同时间尺度趋势的一致性 | 是，注意冗余 |
 | 历史收益 | `return_{period}d` | 不同 horizon 的绝对价格动量 | 是 |
 | 上涨日比例 | `up_ratio_5d`、`up_ratio_20d` | 上涨方向的广度 / 持续性 | 是 |
-| 均线水平 | `ma_{period}` | 平滑后的价格轨道 | 否，主要用于可视化或研究 |
+| 均线水平 | `ma_{period}` | 平滑后的价格轨道 | 否，主要用于研究 |
 
 这些特征均基于当日及此前价格计算。若预测未来收益，特征必须与目标收益严格按时间对齐，避免将未来价格带入训练样本。
 
@@ -20,35 +20,7 @@
 
 ## 当前实现与默认参数
 
-当前实现核心如下：
-
-```python
-periods = [5, 10, 20, 60, 120]
-
-for period in periods:
-    ma = close.rolling(window=period, min_periods=1).mean()
-    result[f"ma_{period}"] = ma
-    result[f"ma_{period}_bias"] = (close - ma) / ma
-    result[f"return_{period}d"] = close / close.shift(period) - 1
-
-for short, long in itertools.pairwise(periods):
-    result[f"ma_{short}_{long}_ratio"] = (
-        result[f"ma_{short}"] / result[f"ma_{long}"]
-    )
-```
-
-上涨日占比使用复权收盘价的日变化方向：
-
-```python
-delta = close.diff()
-status = pd.Series(
-    np.where(delta > 0, 1, np.where(delta < 0, -1, 0)),
-    index=df.index,
-)
-
-result["up_ratio_5d"] = status.eq(1).rolling(5, min_periods=5).mean()
-result["up_ratio_20d"] = status.eq(1).rolling(20, min_periods=20).mean()
-```
+当前实现使用多个窗口计算均线、相对均线偏离、收益率和相邻均线比。上涨日占比则根据复权收盘价的日变化方向计算。
 
 其中平盘日的 `status = 0`：它不计作上涨日，也不计作下跌日。因此上涨日占比衡量的是窗口内“收盘价严格上涨”的天数比例。
 
@@ -72,7 +44,7 @@ $$
 | 60 | 一季度 | 中期趋势背景 |
 | 120 | 半年 | 较长期趋势背景 |
 
-均线的绝对价格水平不宜直接作为跨股票模型输入：100 元股票与 10 元股票的均线数值没有直接可比性。其更适合用于图表，或进一步构造成相对指标。
+均线的绝对价格水平不宜直接作为跨股票模型输入：100 元股票与 10 元股票的均线数值没有直接可比性。其更适合进一步构造成相对指标。
 
 ---
 
@@ -83,17 +55,6 @@ $$
 $$
 bias_{n,t} = \frac{Close_t - MA_{n,t}}{MA_{n,t}}
 $$
-
-对应字段：
-
-```text
-ma_5_bias
-ma_10_bias
-ma_20_bias
-ma_60_bias
-ma_120_bias
-```
-
 | `bias` 状态 | 含义 |
 | --- | --- |
 | `> 0` | 当前价格位于该周期均线上方 |
@@ -108,14 +69,7 @@ ma_120_bias
 
 ## `ma_{short}_{long}_ratio`：快慢趋势结构
 
-当前仅计算相邻周期的均线比：
-
-```text
-ma_5_10_ratio
-ma_10_20_ratio
-ma_20_60_ratio
-ma_60_120_ratio
-```
+当前仅计算相邻周期的均线比。
 
 定义为：
 
@@ -145,16 +99,6 @@ $$
 return_{n,t} = \frac{Close_t}{Close_{t-n}} - 1
 $$
 
-当前字段：
-
-```text
-return_5d
-return_10d
-return_20d
-return_60d
-return_120d
-```
-
 | 收益为正 / 负 | 含义 |
 | --- | --- |
 | `return_5d > 0` | 当前价格高于 5 个交易日前，短期动量为正 |
@@ -175,13 +119,6 @@ up\_ratio_{n,t} =
 \frac{1}{n}\sum_{i=t-n+1}^{t}I(Close_i > Close_{i-1})
 $$
 
-当前输出：
-
-```text
-up_ratio_5d
-up_ratio_20d
-```
-
 它只计数上涨日，不关心每次上涨或下跌的幅度。因此它补充了收益率：少数大涨日可以带来正收益率，但上涨日占比未必很高；反之，多数日小幅上涨也可能带来较高上涨日占比。
 
 | `up_ratio` | 解读 |
@@ -198,17 +135,7 @@ up_ratio_20d
 
 ## 特征使用策略
 
-Price momentum 的合理角色是描述条件化的市场状态：
-
-```text
-长期趋势结构（ma_20_60_ratio、ma_60_120_ratio）
-        +
-短期偏离 / 动量（ma_5_bias、return_5d、return_10d）
-        +
-上涨广度（up_ratio_5d、up_ratio_20d）
-        ↓
-由模型或回测规则评估未来收益与风险
-```
+Price momentum 的合理角色是描述条件化的市场状态。
 
 一个研究用的趋势延续候选状态可以是：中期快慢均线比大于 1、短期收益为正、且短期上涨日占比高于长期上涨日占比。一个均值回归候选状态则可能是：长期趋势仍为正，但短期 `bias` 显著为负。两者都只是**待验证的条件组合**，不是可直接上线的买卖信号。
 
@@ -251,3 +178,20 @@ Price momentum 的合理角色是描述条件化的市场状态：
 5. **组合层回测**：将预测或排序结果转化为可交易组合时，纳入交易成本、滑点、换手、停牌、涨跌停和流动性约束。
 
 特征的最终价值不取决于其技术分析名称，而取决于它在严格时间对齐、样本外且计入交易约束后的增量解释能力。
+
+---
+
+## 常见解读与阈值
+
+下表的区间与事件用于描述指标状态，是研究参照而非独立的交易指令。
+
+| 动量状态或事件 | 常见解读 |
+| --- | --- |
+| `ma_{period}_bias` 为正 | 价格高于近期均线，趋势背景偏强。 |
+| `ma_{period}_bias` 为负 | 价格低于近期均线，趋势背景偏弱。 |
+| 快期均线相对慢期均线走强 | 趋势结构可能改善。 |
+| `return_{period}d` 或 `up_ratio` 上升 | 对应周期的价格动量或上涨广度增强。 |
+| 短期动量转弱、长期趋势仍强 | 可能是趋势中的回撤，也可能是趋势反转的开始。 |
+| 多个周期动量同向 | 不同时间尺度的趋势较一致，但不代表风险较低。 |
+
+不同周期的阈值不可直接通用，应按资产和市场状态进行样本外验证。

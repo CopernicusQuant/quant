@@ -4,7 +4,7 @@
 
 `compute_cci` 使用复权后的最高价、最低价和收盘价计算 Commodity Channel Index（CCI）。它衡量的是：**当前价格相对近期“正常价格区间”偏离了多少**。CCI 不看绝对价格高低，而看当前走势是否显著偏强或偏弱。
 
-默认使用 **14 日**窗口生成 `cci`，并额外生成 **5 日**平滑均线 `cci_ma_5`。首版应优先将连续的 `cci` 及其平滑值作为研究或模型特征；`±100` 的突破、跌破和回归更适合用作可视化及条件研究事件，而不应脱离市场状态机械地产生交易指令。
+默认使用 **14 日**窗口生成 `cci`，并额外生成 **5 日**平滑均线 `cci_ma_5`。首版应优先将连续的 `cci` 及其平滑值作为研究或模型特征；`±100` 的突破、跌破和回归更适合用作条件研究事件，而不应脱离市场状态机械地产生交易指令。
 
 | 字段 | 主要角色 | 首版模型建议 |
 | --- | --- | --- |
@@ -15,23 +15,7 @@
 
 ## 当前实现与参数
 
-实现需要输入 `adj_high`、`adj_low` 和 `adj_close`，并假设 DataFrame 已按交易日期从早到晚排序：
-
-```python
-window = 14
-periods = [5]
-
-tp = (df["adj_high"] + df["adj_low"] + df["adj_close"]) / 3
-tp_sma = tp.rolling(window=window, min_periods=window).mean()
-md = tp.rolling(window=window, min_periods=window).apply(
-    lambda values: np.mean(np.abs(values - values.mean())),
-    raw=True,
-)
-
-cci = (tp - tp_sma) / (0.015 * md.replace(0, np.nan))
-result["cci"] = cci
-result["cci_ma_5"] = cci.rolling(window=5, min_periods=5).mean()
-```
+实现需要输入 `adj_high`、`adj_low` 和 `adj_close`，并假设 DataFrame 已按交易日期从早到晚排序。
 
 其中常数 `0.015` 来自 CCI 提出者 Donald Lambert 的原始定义。它用于让多数常态市场下的 CCI 值大致落在 `-100` 到 `+100` 附近；这不是严格保证，也不表示 `±100` 是跨资产恒定有效的交易阈值。
 
@@ -146,23 +130,6 @@ $$
 - 当窗口内典型价格完全不变时，`md = 0`。实现会以 `md.replace(0, np.nan)` 避免除零；此时 CCI 为 `NaN`，而不是可解释的强弱信号。
 - 缺失或异常的复权高、低、收盘价会传播至后续滚动窗口，应先检查原始行情质量。
 - `rolling()` 按当前行顺序计算，因此输入必须按交易日期升序排列。
-
----
-
-## 可视化
-
-`vis_cci(stock_df, cci_df, window=14, periods=(5,))` 建议使用两个共享横轴面板，并以等距序号 `x = range(len(plot_df))` 作为横坐标位置：
-
-1. 顶部价格面板：复权高低价区间、复权收盘价、典型价格及其 14 日均线。它直接展示 CCI 分子所依据的价格背景；
-2. 底部 CCI 面板：`cci`、`cci_ma_5`、`0` 轴及 `±100` 参考线，便于观察偏离程度和阈值事件。
-
-调用示例：
-
-```python
-stock.set_index("trade_date", inplace=True)
-cci_features = compute_cci(stock, window=14, periods=[5])
-vis_cci(stock, cci_features, window=14, periods=(5,))
-```
 
 ---
 

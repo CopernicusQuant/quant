@@ -4,18 +4,13 @@
 
 Bollinger Bands 在本项目中应主要作为**价格相对位置**与**波动率状态**的连续特征，而不是简单的“上轨卖、下轨买”交易规则。
 
-第一版建议使用经典的 **20 / 2** 参数组合，并仅保留：
-
-```python
-result["bb_width"] = bb_width
-result["bb_position"] = bb_position
-```
+第一版建议使用经典的 **20 / 2** 参数组合，并保留 `bb_position` 与 `bb_width` 两个归一化特征。
 
 | 特征                      | 角色                            | 是否建议首版输入模型   |
 | ------------------------- | ------------------------------- | ---------------------- |
 | `bb_position`             | 价格在局部波动区间中的位置      | 是                     |
 | `bb_width`                | 归一化波动率、volatility regime | 是                     |
-| `upper` / `mid` / `lower` | 价格轨道                        | 否，仅用于可视化或研究 |
+| `upper` / `mid` / `lower` | 价格轨道                        | 否，仅用于研究 |
 
 ---
 
@@ -37,22 +32,7 @@ $$
 
 其中，$\sigma_t$ 是 `period` 窗口内收盘价的滚动标准差，$k$ 是标准差倍数。
 
-当前默认参数：
-
-```python
-period = 20
-std_dev = 2.0
-```
-
-对应实现：
-
-```python
-mid = close.rolling(window=period).mean()
-rolling_std = close.rolling(window=period).std(ddof=0)
-
-upper = mid + rolling_std * std_dev
-lower = mid - rolling_std * std_dev
-```
+当前默认参数为 `period=20`、`std_dev=2.0`。
 
 `period=20` 约对应一个交易月，`std_dev=2` 是最常用的传统参数组合。
 
@@ -60,11 +40,7 @@ lower = mid - rolling_std * std_dev
 
 ## 标准差口径：`ddof=0`
 
-项目中的 Bollinger Bands 使用总体标准差：
-
-```python
-rolling_std = close.rolling(window=period).std(ddof=0)
-```
+项目中的 Bollinger Bands 使用总体标准差（`ddof=0`）。
 
 而不是 Pandas `rolling().std()` 默认的 `ddof=1`。
 
@@ -90,12 +66,6 @@ $$
 $$
 bb\_width_t = \frac{Upper_t-Lower_t}{Mid_t}
 $$
-
-对应实现：
-
-```python
-bb_width = diff_ul / mid.replace(0, np.nan)
-```
 
 其中：
 
@@ -157,12 +127,6 @@ bb\_position_t =
 \frac{Close_t-Lower_t}{Upper_t-Lower_t}
 $$
 
-对应实现：
-
-```python
-bb_position = (close - lower) / diff_ul.replace(0, np.nan)
-```
-
 典型解释：
 
 | `bb_position` | 含义         |
@@ -189,13 +153,7 @@ $$
 
 ## 参数选择：优先研究 `period`
 
-`std_dev = k` 决定上下轨距中轨多少个标准差：
-
-```text
-k = 1：带较窄
-k = 2：经典 Bollinger Bands
-k = 3：带较宽
-```
+`std_dev = k` 决定上下轨距中轨多少个标准差。
 
 但若 $k$ 对所有样本固定，它对机器学习特征主要是尺度变换。
 
@@ -215,39 +173,13 @@ $$
 
 改变 $k$ 同样主要是线性缩放偏离项。因此，对 LightGBM 而言，`period` 通常比 `std_dev` 更值得研究。
 
-不建议第一阶段同时生成：
+不建议第一阶段同时生成多个仅标准差倍数不同的布林带特征；它们高度冗余。若后续需要多尺度实验，应选择明显不同的窗口。
 
-```text
-BB(20, 1)
-BB(20, 2)
-BB(20, 3)
-```
-
-这些特征高度冗余。如后续需要多尺度实验，应选择明显不同的窗口：
-
-```text
-period = 10 / 20 / 60
-```
-
-分别表示短期、月度和季度附近的局部波动区间。
+可将短期、月度与季度附近的窗口作为后续多尺度研究候选。
 
 ---
 
 ## 缺失值与除零处理
-
-完整实现：
-
-```python
-mid = close.rolling(window=period).mean()
-rolling_std = close.rolling(window=period).std(ddof=0)
-
-upper = mid + rolling_std * std_dev
-lower = mid - rolling_std * std_dev
-diff_ul = upper - lower
-
-result["bb_width"] = diff_ul / mid.replace(0, np.nan)
-result["bb_position"] = (close - lower) / diff_ul.replace(0, np.nan)
-```
 
 ### Warm-up period
 
@@ -255,21 +187,10 @@ result["bb_position"] = (close - lower) / diff_ul.replace(0, np.nan)
 
 ### 零带宽
 
-当滚动窗口中价格完全不变时：
+当滚动窗口中价格完全不变时，带宽为零。
 
-```text
-rolling_std = 0
-upper = lower
-diff_ul = 0
-```
+此时 `bb_position` 的分母为零，价格在带内的相对位置没有定义；应保留为 `NaN`。
 
-此时 `bb_position` 的分母为零，价格在带内的相对位置没有定义。使用：
-
-```python
-diff_ul.replace(0, np.nan)
-```
-
-会使该结果为 `NaN`，而不会得到 `inf` 或产生除零警告。
 
 同样，不建议把无法计算的 `bb_width` 或 `bb_position` 人为填成 `0`：
 
@@ -286,36 +207,19 @@ diff_ul.replace(0, np.nan)
 
 ### 第一阶段
 
-仅保留核心特征：
-
-```text
-bb_width
-bb_position
-```
+仅保留 `bb_width` 与 `bb_position`，并验证其增量价值。
 
 首先在 walk-forward 样本外验证其增量价值。
 
 ### 第二阶段
 
-若特征重要度、SHAP 或 ablation test 显示 Bollinger 特征有稳定贡献，再加入变化特征：
-
-```python
-result["bb_width_change_5d"] = bb_width.diff(5)
-result["bb_position_change_5d"] = bb_position.diff(5)
-```
+若特征重要度、SHAP 或 ablation test 显示 Bollinger 特征有稳定贡献，再加入变化率。
 
 其中 `bb_width_change_5d` 可以区分相同波动率水平下，市场正处于扩张还是收缩阶段。
 
 ### 第三阶段
 
-再考虑多窗口和长期相对位置，例如：
-
-```text
-bb_width_10
-bb_width_20
-bb_width_60
-bb_width_percentile_252d
-```
+再考虑多窗口和长期相对位置特征。
 
 `bb_width_percentile_252d` 用于描述当前波动率在该股票过去一年中的相对位置，可能比固定阈值更适合识别 Bollinger squeeze。
 
@@ -323,57 +227,11 @@ bb_width_percentile_252d
 
 ---
 
-## 验证与可视化建议
-
-### 价格与布林带
-
-绘制：
-
-```text
-Close
-Middle band
-Upper band
-Lower band
-Band fill area
-```
-
-重点确认：
-
-- 中轨是否为 `period` 日均线；
-- 上下轨是否与中轨保持对称；
-- 带宽是否会随波动率上升而扩张；
-- 收盘价突破轨道时，`bb_position` 是否相应大于 `1` 或小于 `0`。
-
-### `bb_position` 时间序列
-
-绘制：
-
-```text
-bb_position
-y = 0
-y = 0.5
-y = 1
-```
-
-用于直观确认价格相对上、中、下轨的位置关系。
-
-### `bb_width` 时间序列
-
-绘制：
-
-```text
-bb_width
-```
-
-用于观察波动率收缩、扩张以及可能的 squeeze 阶段。
+## 验证建议
 
 ### 分组与未来收益
 
-每天按 `bb_position` 或 `bb_width` 在股票横截面分组，例如十组：
-
-```text
-Q1 ... Q10
-```
+每天可按 `bb_position` 或 `bb_width` 在股票横截面分组，例如分为十组。
 
 比较各组未来 20 日平均超额收益，并进一步按趋势或市场状态分层。例如，对 `bb_position` 可分别在 `dema_spread > 0` 与 `dema_spread <= 0` 的样本中验证，以判断其均值回归与趋势延续效应是否依赖市场环境。
 
@@ -383,26 +241,23 @@ Q1 ... Q10
 
 ## 推荐特征集合
 
-第一版：
-
-```python
-mid = close.rolling(window=20).mean()
-rolling_std = close.rolling(window=20).std(ddof=0)
-
-upper = mid + 2.0 * rolling_std
-lower = mid - 2.0 * rolling_std
-diff_ul = upper - lower
-
-result["bb_width"] = diff_ul / mid.replace(0, np.nan)
-result["bb_position"] = (close - lower) / diff_ul.replace(0, np.nan)
-```
-
-整体角色划分：
-
-```text
-Bollinger Bands
-- bb_position: normalized price-location feature
-- bb_width: volatility-regime feature
-```
+第一版将 `bb_position` 用作归一化价格位置特征，将 `bb_width` 用作波动率状态特征。
 
 第一阶段不将 `upper`、`mid`、`lower` 作为模型输入，也不将 Bollinger Bands 固化为传统买卖信号。后续是否增加变化率或多周期特征，应以样本外模型结果为依据。
+
+---
+
+## 常见解读与阈值
+
+下表的区间与事件用于描述指标状态，是研究参照而非独立的交易指令。
+
+| 布林带状态或事件 | 常见解读 |
+| --- | --- |
+| `bb_position` 接近或高于上轨 | 价格处于近期区间上沿，可能反映强势，也可能处于超买状态。 |
+| `bb_position` 接近或低于下轨 | 价格处于近期区间下沿，可能反映弱势，也可能处于超卖状态。 |
+| `bb_width` 扩大 | 波动率正在上升，可能伴随趋势扩张或风险上升。 |
+| `bb_width` 收窄 | 波动率处于收缩状态，后续方向仍需由价格和成交量确认。 |
+| `bb_position` 上穿中轨 | 价格从区间下半部回到上半部，短期位置可能改善。 |
+| `bb_position` 下穿中轨 | 价格从区间上半部回落，短期位置可能转弱。 |
+
+触及上下轨不构成机械反转信号，应结合趋势和波动率状态验证。

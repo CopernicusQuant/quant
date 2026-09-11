@@ -22,39 +22,7 @@
 
 ## 当前实现与参数
 
-实现需要输入 `adj_high`、`adj_low`、`adj_close` 与 `turnover`，并假设 DataFrame 已按交易日期从早到晚排序：
-
-```python
-periods = [5, 20]
-quantile_period = 60
-
-prev_close = close.shift(1)
-amplitude = (high - low) / prev_close.where(prev_close > 0)
-
-for period in periods:
-    result[f"amplitude_ma_{period}"] = amplitude.rolling(
-        window=period, min_periods=1
-    ).mean()
-
-    turnover_ma = turnover.rolling(window=period, min_periods=1).mean()
-    result[f"turnover_ma_{period}_bias"] = (
-        turnover / turnover_ma.clip(lower=1e-6) - 1
-    )
-```
-
-分位数使用当前日包含在内的滚动窗口：
-
-```python
-amplitude_quantile = amplitude.rolling(
-    window=quantile_period,
-    min_periods=40,
-).rank(pct=True)
-
-turnover_quantile = turnover.rolling(
-    window=quantile_period,
-    min_periods=40,
-).rank(pct=True)
-```
+实现需要输入 `adj_high`、`adj_low`、`adj_close` 与 `turnover`，并假设 DataFrame 已按交易日期从早到晚排序。分位数使用当前日包含在内的滚动窗口计算。
 
 因此，当前实现的分位数表示“今天在最近最多 60 个交易日中的相对排名”，而不是与全市场或全样本的静态排名。
 
@@ -105,12 +73,7 @@ turnover\_ma\_{n}\_bias_t =
 \frac{Turnover_t}{\max(TurnoverMA_{n,t}, 10^{-6})} - 1
 $$
 
-对应字段：
-
-```text
-turnover_ma_5_bias
-turnover_ma_20_bias
-```
+字段含义如下：
 
 | Bias 状态 | 含义 |
 | --- | --- |
@@ -177,25 +140,6 @@ $$
 
 ---
 
-## 可视化
-
-`visualization/activity.py` 的 `vis_activity_features(stock_df, feature_df)` 将原始行情与特征通过 `trade_date` index 对齐后，绘制四个共享横轴的面板：
-
-1. 复权收盘价：提供价格背景；
-2. 日内区间及其移动平均：观察短期与中短期波动范围；
-3. 换手率柱状图及换手率均线偏离：区分绝对活动量和相对异常程度；
-4. 三个联合状态 score：比较当前主要的活动类型。
-
-当前图表仅展示指定日期之后的数据，并以等距序号作为横坐标位置，再显示交易日期标签。调用示例：
-
-```python
-stock.set_index("trade_date", inplace=True)
-activity_features = compute_activity_features(stock)
-vis_activity_features(stock, activity_features)
-```
-
----
-
 ## 边界情况与验证建议
 
 - `rolling()` 和 `shift()` 按当前行顺序计算；输入必须按交易日期升序排列。
@@ -205,3 +149,19 @@ vis_activity_features(stock, activity_features)
 - 使用 walk-forward 或 expanding-window 样本外测试，分别检验原始幅度、换手偏离、分位数与联合 score 的预测增量，并做消融实验以识别与价格动量、成交量动量、波动率特征的冗余。
 
 这些特征描述的是市场活动状态；其是否具有可交易价值，仍需在严格时间对齐、考虑成本与可交易性约束的回测中验证。
+
+---
+
+## 常见解读与阈值
+
+下表的区间与事件用于描述指标状态，是研究参照而非独立的交易指令。
+
+| 状态或事件 | 常见解读 |
+| --- | --- |
+| `amplitude` 或换手率处于高分位 | 当日波动或参与度显著高于自身近期常态，应结合价格方向判断是趋势扩张还是分歧加大。 |
+| `amplitude` 与换手率同时升高 | 市场活动显著增强，可能对应突破、加速或剧烈分歧。 |
+| 两者均处于低分位 | 市场活动偏弱，趋势信号的可信度通常需要额外验证。 |
+| 波动高分位、换手低分位 | 价格活动大但参与度不足，可能是分歧或流动性脆弱，应谨慎确认。 |
+| 波动低分位、换手高分位 | 交易活跃但价格区间有限，可能反映吸收、换手或方向尚未明确。 |
+
+高分位不等于后续必然上涨或下跌；阈值应在样本外按市场状态和个股流动性验证。

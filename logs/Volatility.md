@@ -17,21 +17,7 @@
 
 ## 当前实现与参数
 
-实现要求输入含 `adj_close` 的单只股票 DataFrame，并假设数据已按交易日期从早到晚排序：
-
-```python
-window = 20
-rank_period = 60
-
-close = df["adj_close"]
-returns = close.pct_change()
-volatility = returns.rolling(window=window).std()
-
-result["volatility_log"] = np.log(volatility + 1e-8)
-result["volatility_rank"] = volatility.rolling(
-    window=rank_period
-).rank(pct=True)
-```
+实现要求输入含 `adj_close` 的单只股票 DataFrame，并假设数据已按交易日期从早到晚排序。
 
 `volatility` 是计算过程中的原始日波动率，当前不会作为字段写入 `result`；输出的是其对数值和历史分位数。默认 `rolling().std()` 使用 Pandas 的样本标准差（`ddof=1`）。
 
@@ -123,24 +109,6 @@ $$
 
 ---
 
-## 原始数据可视化
-
-为了直观看到真实数值，应直接绘制与实现相同的原始波动率，而不是绘制 `volatility_log`：
-
-```python
-raw_volatility = stock_df["adj_close"].pct_change().rolling(20).std()
-```
-
-建议使用三个共享横轴的面板：
-
-1. `adj_close`：提供价格背景；
-2. `raw_volatility`：显示原始 20 日日收益率标准差，纵轴以百分比格式展示；
-3. `volatility_rank`：显示当前波动率相对近期 60 日历史的位置。
-
-这样可同时区分“绝对波动率很高”与“相对该股票近期历史很高”：前者由原始波动率反映，后者由 `volatility_rank` 反映。
-
----
-
 ## 边界情况与验证建议
 
 - 输入必须按交易日期升序排列；`pct_change()` 与 `rolling()` 都依赖当前行顺序。
@@ -149,3 +117,19 @@ raw_volatility = stock_df["adj_close"].pct_change().rolling(20).std()
 - `window` 与 `rank_period` 应为正整数；`rank_period` 取太短会使相对排名不稳定，取太长则对 regime 变化反应较慢。
 - `volatility_log` 与 Bollinger `bb_width` 都包含波动率信息，可能具有冗余性；应使用 walk-forward 或 expanding-window 的样本外评估、特征重要度与消融实验判断是否同时保留。
 - 建议按趋势方向、流动性、行业及高低波动状态分层评估其对未来收益、回撤和风险调整收益的影响。波动率通常更适合作为仓位、风险控制或条件特征，而非单独的方向信号。
+
+---
+
+## 常见解读与阈值
+
+下表的区间与事件用于描述指标状态，是研究参照而非独立的交易指令。
+
+| 波动率状态或事件 | 常见解读 |
+| --- | --- |
+| `volatility_rank` 处于高分位 | 当前波动率显著高于自身近期常态，风险与不确定性通常更高。 |
+| `volatility_rank` 处于低分位 | 当前波动率相对收缩，可能处于平稳阶段。 |
+| 波动率快速上升 | 市场状态可能切换，应关注风险控制和价格方向。 |
+| 高分位后继续上升 | 风险可能进一步放大，收益方向仍不可由波动率单独判断。 |
+| 低分位后开始回升 | 波动收缩可能结束，应结合价格和成交量确认后续状态。 |
+
+波动率本身不提供方向预测；高低分位阈值应按资产和样本外表现校准。
