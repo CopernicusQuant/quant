@@ -66,4 +66,6 @@ FEATURE_META_COLLECTION = {
     # ./calculator_utils/compute_volatility
     "volatility_log": FeatureMeta(winsorize=True, neutralize=True),
     "volatility_rank": FeatureMeta(neutralize=True),
+    # ./calculator_utils/compute_cci
+    "cci": FeatureMeta(winsorize=True, neutralize=True),
 }

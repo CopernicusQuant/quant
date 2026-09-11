@@ -179,6 +179,39 @@ def compute_volatility(
     return result
 
 
+def compute_cci(
+    df: pd.DataFrame, window: int = 14, periods: list[int] | None = None
+) -> pd.DataFrame:
+    """
+    Calculate cci (Commodity Channel Index)
+    features `cci`
+
+    Args:
+        df: single stock data
+    Returns:
+        pd.DataFrame with calculated features
+    """
+    result = pd.DataFrame(index=df.index)
+    tp = (df["adj_high"] + df["adj_low"] + df["adj_close"]) / 3
+    tp_sma = tp.rolling(window=window, min_periods=window).mean()
+    result["tp"] = tp
+    result["tp_sma"] = tp_sma
+    # mean deviation
+    md = tp.rolling(window=window, min_periods=window).apply(
+        lambda values: np.mean(np.abs(values - values.mean())), raw=True
+    )
+    # 0.015 was defined by the CCI proposer Donald Lambert
+    cci = (tp - tp_sma) / (0.015 * md.replace(0, np.nan))
+    result["cci"] = cci
+
+    # cci moving average
+    if periods is None:
+        periods = [5]
+    for p in periods:
+        result[f"cci_ma_{p}"] = cci.rolling(window=p, min_periods=p).mean()
+    return result
+
+
 def compute_dema(
     df: pd.DataFrame, fast_period: int = 20, slow_period: int = 60
 ) -> pd.DataFrame:
