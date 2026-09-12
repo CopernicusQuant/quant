@@ -17,6 +17,7 @@ class FeatureMeta:
         return f"FeatureMeta(categorical={self.categorical}, winsorize={self.winsorize}, neutralize={self.neutralize}, weekly={self.weekly})"
 
 
+# in the current version we don't do weekly features
 FEATURE_META_COLLECTION = {
     # ./calculator_utils/combine_stock_basics
     "ts_code": FeatureMeta(categorical=True),
@@ -68,4 +69,22 @@ FEATURE_META_COLLECTION = {
     "volatility_rank": FeatureMeta(neutralize=True),
     # ./calculator_utils/compute_cci
     "cci": FeatureMeta(winsorize=True, neutralize=True),
+    # ./calculator_utils/compute_dema
+    "dema_5_10_spread": FeatureMeta(winsorize=True, neutralize=True),
+    "dema_10_20_spread": FeatureMeta(winsorize=True, neutralize=True),
+    "dema_20_60_spread": FeatureMeta(winsorize=True, neutralize=True),
+    "dema_5_10_gold": FeatureMeta(categorical=True),
+    "dema_10_20_gold": FeatureMeta(categorical=True),
+    "dema_20_60_gold": FeatureMeta(categorical=True),
+    "dema_5_10_dead": FeatureMeta(categorical=True),
+    "dema_10_20_dead": FeatureMeta(categorical=True),
+    "dema_20_60_dead": FeatureMeta(categorical=True),
+    # ./calculator_utils/compute_macd
+    "macd_diff": FeatureMeta(winsorize=True, neutralize=True),
+    "macd_hist": FeatureMeta(winsorize=True, neutralize=True),
+    "macd_gold": FeatureMeta(categorical=True),
+    "macd_dead": FeatureMeta(categorical=True),
+    # ./calculator_utils/compute_bollinger_bands
+    "bb_width": FeatureMeta(winsorize=True, neutralize=True),
+    "bb_position": FeatureMeta(winsorize=True, neutralize=True),
 }
