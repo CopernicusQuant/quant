@@ -212,36 +212,45 @@ def compute_cci(
     return result
 
 
-def compute_dema(
-    df: pd.DataFrame, fast_period: int = 20, slow_period: int = 60
-) -> pd.DataFrame:
+def compute_dema(df: pd.DataFrame, periods: list[int] | None = None) -> pd.DataFrame:
+    """
+    Calculate DEMA-related features
+    features:
+        dema_{fast_period}_{slow_period}_spread
+        dema_{fast_period}_{slow_period}_gold
+        dema_{fast_period}_{slow_period}_dead
+
+    Args:
+        df: single stock data
+        periods: a list of moving window period in integer
+    Returns:
+        pd.DataFrame with calculated features
+    """
     result = pd.DataFrame(index=df.index)
     close = df["adj_close"]
-    ema1_fast = close.ewm(span=fast_period, adjust=False).mean()
-    ema1_slow = close.ewm(span=slow_period, adjust=False).mean()
+    if periods is None:
+        periods = [5, 10, 20, 60]
+    for fast, slow in itertools.pairwise(periods):
+        ema1_fast = close.ewm(span=fast, adjust=False).mean()
+        ema1_slow = close.ewm(span=slow, adjust=False).mean()
 
-    ema2_fast = ema1_fast.ewm(span=fast_period, adjust=False).mean()
-    ema2_slow = ema1_slow.ewm(span=slow_period, adjust=False).mean()
+        ema2_fast = ema1_fast.ewm(span=fast, adjust=False).mean()
+        ema2_slow = ema1_slow.ewm(span=slow, adjust=False).mean()
 
-    dema_fast = 2 * ema1_fast - ema2_fast
-    dema_slow = 2 * ema1_slow - ema2_slow
+        dema_fast = 2 * ema1_fast - ema2_fast
+        dema_slow = 2 * ema1_slow - ema2_slow
 
-    spread = dema_fast / dema_slow - 1
+        spread = dema_fast / dema_slow - 1
 
-    # visualization features
-    result["close"] = df["adj_close"]
-    result["trade_date"] = df["trade_date"]
-    result[f"dema_{fast_period}_{slow_period}_fast"] = dema_fast
-    result[f"dema_{fast_period}_{slow_period}_slow"] = dema_slow
-
-    # training features
-    result[f"dema_{fast_period}_{slow_period}_spread"] = spread
-    result[f"dema_{fast_period}_{slow_period}_gold"] = (
-        (spread.shift(1) <= 0) & (spread > 0)
-    ).astype(int)
-    result[f"dema_{fast_period}_{slow_period}_dead"] = (
-        (spread.shift(1) >= 0) & (spread < 0)
-    ).astype(int)
+        result[f"dema_{fast}_{slow}_fast"] = dema_fast
+        result[f"dema_{fast}_{slow}_slow"] = dema_slow
+        result[f"dema_{fast}_{slow}_spread"] = spread
+        result[f"dema_{fast}_{slow}_gold"] = (
+            (spread.shift(1) <= 0) & (spread > 0)
+        ).astype(int)
+        result[f"dema_{fast}_{slow}_dead"] = (
+            (spread.shift(1) >= 0) & (spread < 0)
+        ).astype(int)
     return result
 
 
@@ -251,6 +260,18 @@ def compute_macd(
     slow_period: int = 26,
     signal_period: int = 9,
 ) -> pd.DataFrame:
+    """
+    Calculate MACD related features
+    features: `macd_diff`, `macd_hist`, `macd_gold`, `macd_dead`
+
+    Args:
+        df: a single stock dataframe
+        fast_period: integer represents fast period
+        slow_period: integer represents slow period, should be larger than the fast period
+        signal_period: integer for dea period
+    Returns:
+        pd.DataFrame with calculated features
+    """
     result = pd.DataFrame(index=df.index)
     close = df["adj_close"]
 
@@ -264,15 +285,10 @@ def compute_macd(
     macd_gold = ((macd_hist.shift(1) < 0) & (macd_hist > 0)).astype(int)
     macd_dead = ((macd_hist.shift(1) > 0) & (macd_hist < 0)).astype(int)
 
-    # visualization features
-    result["close"] = df["adj_close"]
-    result["trade_date"] = df["trade_date"]
     result["macd_ema_slow"] = ema_slow
     result["macd_ema_fast"] = ema_fast
     result["macd_gold"] = macd_gold
     result["macd_dead"] = macd_dead
-
-    # training features
     result["macd_diff"] = diff
     result["macd_dea"] = dea
     result["macd_hist"] = macd_hist
@@ -283,9 +299,20 @@ def compute_macd(
 def compute_bollinger_bands(
     df: pd.DataFrame, period: int = 20, std_dev: float = 2.0
 ) -> pd.DataFrame:
+    """
+    Calculate stock's Bollinger Bands
+    features: `bb_width`, `bb_position`
+
+    Args:
+        df: a single stock dataframe
+        period:  period for rolling std
+        std_dev: scale factor of std
+
+    Return:
+        pd.DataFrame of the calculated features
+    """
     result = pd.DataFrame(index=df.index)
     close = df["adj_close"]
-
     mid = close.rolling(window=period).mean()
     rolling_std = close.rolling(window=period).std(ddof=0)  # ddof=0 for population std
 
@@ -296,14 +323,9 @@ def compute_bollinger_bands(
     bb_width = diff_ul / mid.replace(0, np.nan)
     bb_position = (close - lower) / diff_ul.replace(0, np.nan)
 
-    # visualization features
-    result["close"] = df["adj_close"]
-    result["trade_date"] = df["trade_date"]
     result["bb_upper"] = upper
     result["bb_lower"] = lower
     result["bb_mid"] = mid
-
-    # training features
     result["bb_width"] = bb_width
     result["bb_position"] = bb_position
     return result
