@@ -332,6 +332,19 @@ def compute_bollinger_bands(
 
 
 def compute_kdj(df: pd.DataFrame, n: int = 9, m1: int = 3, m2: int = 3) -> pd.DataFrame:
+    """
+    Calculate KDJ (stochastic-oscillator)
+    features: `kdj_k`
+
+    Args:
+        df: a single stock's dataframe
+        n: rolling window
+        m1: smooth factor for K line, as an integer
+        m2: smooth factor for D line, as an integer
+
+    Returns:
+        pd.DataFrame: calculated features
+    """
     result = pd.DataFrame(index=df.index)
     low = df["adj_low"]
     high = df["adj_high"]
@@ -353,24 +366,28 @@ def compute_kdj(df: pd.DataFrame, n: int = 9, m1: int = 3, m2: int = 3) -> pd.Da
     )
     # k: smoothed rsv
     k = rsv.ewm(alpha=1 / m1, adjust=False).mean()
-    # d = k.ewm(alpha=1 / m2, adjust=False).mean()
-    # j = 3 * k + 2 * d
+    d = k.ewm(alpha=1 / m2, adjust=False).mean()
+    j = 3 * k - 2 * d
 
-    # visualization features
-    result["trade_date"] = df["trade_date"]
-    result["open"] = df["adj_open"]
-    result["close"] = df["adj_close"]
-    result["low"] = df["adj_low"]
     result[f"kdj_low_{n}"] = low_n
     result[f"kdj_high_{n}"] = high_n
-
     result["kdj_k"] = k
-    # result["kdj_d"] = d
-    # result["kdj_j"] = j
+    result["kdj_d"] = d
+    result["kdj_j"] = j
     return result
 
 
 def compute_rsi(df: pd.DataFrame, periods: list[int] | None = None) -> pd.DataFrame:
+    """
+    Calculate rsi (Relative Strength Index)
+    features: rsi: rsi_{period}
+
+    Args:
+        df: a single stock's dataframe
+        periods: a list of period in integer
+    Returns:
+        pd.DataFrame of calculated features
+    """
     if periods == None:
         periods = [6, 14]  # default periods
 
@@ -390,14 +407,16 @@ def compute_rsi(df: pd.DataFrame, periods: list[int] | None = None) -> pd.DataFr
         result[f"rsi_{period}_over_bought"] = (rsi > 70).astype(int)
         result[f"rsi_{period}_over_sold"] = (rsi < 30).astype(int)
 
-    # visualization features
-    result["trade_date"] = df["trade_date"]
-    result["close"] = close
-
     return result
 
 
-def compute_obv(df: pd.DataFrame) -> pd.DataFrame:
+def compute_obv(df: pd.DataFrame, periods: list[int] | None = None) -> pd.DataFrame:
+    """
+    Calculate obv (On Balance Volume)
+
+    """
+    if periods is None:
+        periods = [5, 20]
     result = pd.DataFrame(index=df.index)
     close = df["adj_close"]
     volume = df["adj_vol"]
@@ -407,19 +426,15 @@ def compute_obv(df: pd.DataFrame) -> pd.DataFrame:
     signed_volume.iloc[0] = (
         0  # set the first day as zero to avoid any wrong gain/loss sign
     )
+    for period in periods:
+        flow = signed_volume.rolling(period, min_periods=period).sum()
+        result[f"obv_strength_{period}"] = (
+            flow / volume.rolling(period, min_periods=period).sum()
+        )
 
-    flow_5 = signed_volume.rolling(5, min_periods=5).sum()
-    flow_20 = signed_volume.rolling(20, min_periods=20).sum()
-
-    result["close"] = close
-
-    # model features
-    result["obv_flow_strength_5"] = flow_5 / volume.rolling(5, min_periods=5).sum()
-    result["obv_flow_strength_20"] = flow_20 / volume.rolling(20, min_periods=20).sum()
-
-    # between [2, -2]
-    result["obv_strength_accel_5_20"] = (
-        result["obv_flow_strength_5"] - result["obv_flow_strength_20"]
-    )
-
+    for fast, slow in itertools.pairwise(periods):
+        # between [2, -2]
+        result[f"obv_strength_accel_{fast}_{slow}"] = (
+            result[f"obv_strength_{fast}"] - result[f"obv_strength_{slow}"]
+        )
     return result

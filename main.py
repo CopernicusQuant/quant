@@ -4,11 +4,11 @@ from data import DataStore
 from feature.calculator_utils import (
     # compute_rsi,
     # combine_stock_basics,
-    compute_bollinger_bands,
+    # compute_bollinger_bands,
     # compute_dema,
     # compute_kdj,
     # compute_macd,
-    # compute_obv,
+    compute_obv,
     # compute_price_momentum,
     # compute_volume_momentum,
     # compute_activity_features,
@@ -31,7 +31,10 @@ from feature.calculator_utils import (
 # from visualization.cci import vis_cci
 # from visualization.dema import vis_dema
 # from visualization.macd import vis_macd
-from visualization.bollinger_bands import vis_bollinger_bands
+# from visualization.bollinger_bands import vis_bollinger_bands
+# from visualization.kdj import vis_kdj
+# from visualization.rsi import vis_rsi
+from visualization.obv import vis_obv_flow
 
 logging.basicConfig(level=logging.INFO)
 
@@ -57,10 +60,14 @@ def main():
     # vis_volume_momentum(stock, result[result.index >= "20250910"])
     # result = compute_volatility(stock)
     # vis_volatility(stock, result)
-    result = compute_bollinger_bands(stock)
-    vis_bollinger_bands(stock, result)
+    # result = compute_bollinger_bands(stock)
+    # result = compute_kdj(stock)
+    # vis_kdj(stock, result)
+    # vis_bollinger_bands(stock, result)
     # vis_dema(stock_df=stock, dema_df=result)
     # print(result.tail(30))
+    result = compute_obv(stock)
+    vis_obv_flow(stock, result)
 
 
 if __name__ == "__main__":
