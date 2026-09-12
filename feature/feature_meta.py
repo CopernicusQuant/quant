@@ -87,4 +87,13 @@ FEATURE_META_COLLECTION = {
     # ./calculator_utils/compute_bollinger_bands
     "bb_width": FeatureMeta(winsorize=True, neutralize=True),
     "bb_position": FeatureMeta(winsorize=True, neutralize=True),
+    # ./calculator_utils/compute_kdj
+    "kdj_k": FeatureMeta(winsorize=True, neutralize=True),
+    # ./calculator_utils/compute_rsi
+    "rsi_6": FeatureMeta(winsorize=True, neutralize=True),
+    "rsi_14": FeatureMeta(winsorize=True, neutralize=True),
+    # ./calculator_utils/compute_obv
+    "obv_strength_5": FeatureMeta(winsorize=True, neutralize=True),
+    "obv_strength_20": FeatureMeta(winsorize=True, neutralize=True),
+    "obv_strength_accel_5_20": FeatureMeta(winsorize=True, neutralize=True),
 }
