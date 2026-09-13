@@ -4,12 +4,12 @@ import pandas as pd
 
 def vis_bollinger_bands(
     stock_df: pd.DataFrame,
-    bb_df: pd.DataFrame,
+    feature_df: pd.DataFrame,
     period: int = 20,
     std_dev: float = 2.0,
 ):
-    plot_df = stock_df.join(bb_df).copy()
-    plot_df = plot_df[-60:]
+    plot_df = stock_df.join(feature_df, rsuffix="_bb").copy()
+    # plot_df = plot_df[-60:]
     plot_df["trade_date"] = pd.to_datetime(
         plot_df.index.astype(str),
         format="%Y%m%d",
@@ -91,7 +91,7 @@ def vis_bollinger_bands(
     ax_width.legend()
     ax_width.grid(alpha=0.3)
 
-    ax_width.set_xticks(plot_df["trade_date"].iloc[::2])
+    ax_width.set_xticks(plot_df["trade_date"].iloc[::20])
     ax_width.tick_params(axis="x", rotation=45)
 
     fig.tight_layout()
