@@ -4,6 +4,7 @@ import shutil
 from pathlib import Path
 
 import pandas as pd
+import pyarrow as pa
 import pyarrow.parquet as pq
 from pyarrow import fs
 
@@ -12,6 +13,7 @@ from config import get_config
 INDEX_DIR = "index"
 STOCK_DIR = "stock"
 META_DIR = "meta"
+FEATURE_DIR = "feature"
 
 STOCK_LIST_FILENAME_PREFIX = "stock_list"
 LOCAL_DATA_FOLDER = "data"
@@ -43,8 +45,10 @@ class DataStore:
             f"{self.bucket_name}/{META_DIR}/{self.stock_list_filename}.csv"
         )
         self._r2_stocks_path = f"{self.bucket_name}/{STOCK_DIR}"
+        self._r2_features_path = f"{self.bucket_name}/{FEATURE_DIR}"
         self._local_stock_list_path = f"{LOCAL_DATA_FOLDER}/{self._r2_stock_list_path}"
         self._local_stocks_path = f"{LOCAL_DATA_FOLDER}/{self._r2_stocks_path}"
+        self._local_features_path = f"{LOCAL_DATA_FOLDER}/{self._r2_features_path}"
 
     def get_stock_list(self) -> pd.DataFrame:
         stock_list_path = Path(self._local_stock_list_path)
@@ -79,6 +83,16 @@ class DataStore:
         stock_path = f"{self._local_stocks_path}/{ts_code}.parquet"
         table = pq.read_table(stock_path, filters=filters)
         df = table.to_pandas()
+        df = df.set_index("trade_date")
+        return df
+
+    def load_single_feature(
+        self, ts_code: str, filters: list[tuple] | None = None
+    ) -> pd.DataFrame:
+        stock_path = f"{self._local_features_path}/{ts_code}.parquet"
+        table = pq.read_table(stock_path, filters=filters)
+        df = table.to_pandas()
+        df = df.set_index("trade_date")
         return df
 
     def load_stocks(self, filters: list[tuple] | None = None) -> pd.DataFrame:
@@ -90,8 +104,24 @@ class DataStore:
         df = table.to_pandas()
         return df
 
+    def save_single_feature(
+        self, ts_code: str, feature_df: pd.DataFrame, save_csv: bool = False
+    ) -> None:
+        df = feature_df.copy()
+        df = df.reset_index()
+        if save_csv:
+            df.to_csv(f"{self._local_features_path}/{ts_code}.csv", index=False)
+        else:
+            table = pa.Table.from_pandas(df, preserve_index=False)
+            pq.write_table(
+                table,
+                f"{self._local_features_path}/{ts_code}.parquet",
+                compression="zstd",
+                compression_level=3,
+            )
+
     def _ensure_local_dirs(self):
-        for folder in [INDEX_DIR, STOCK_DIR, META_DIR]:
+        for folder in [INDEX_DIR, STOCK_DIR, META_DIR, FEATURE_DIR]:
             os.makedirs(
                 f"{LOCAL_DATA_FOLDER}/{self.bucket_name}/{folder}", exist_ok=True
             )
