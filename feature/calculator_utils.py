@@ -17,11 +17,11 @@ def combine_stock_basics(stock_data_df: pd.DataFrame, stock_info_df: pd.DataFram
     Returns:
         combined data frame
     """
-    result = stock_data_df[
-        ["ts_code", "trade_date", "turnover", "pb", "pe", "roe"]
-    ].copy()
+    result = pd.DataFrame(index=stock_data_df.index)
+    result[["ts_code", "turnover", "pb", "pe", "roe"]] = stock_data_df[
+        ["ts_code", "turnover", "pb", "pe", "roe"]
+    ]
     result["industry"] = stock_info_df["sub_industry"].iloc[0]
-    result.set_index("trade_date", inplace=True)
     return result
 
 
@@ -46,22 +46,30 @@ def compute_price_momentum(
     for period in periods:
         ma = close.rolling(window=period, min_periods=1).mean()
         result[f"ma_{period}"] = (
-            ma  # ma will not be in the feature colletion, it will be used for calculation or data visualization
+            (
+                ma  # ma will not be in the feature colletion, it will be used for calculation or data visualization
+            ).astype("float32")
         )
-        result[f"ma_{period}_bias"] = (close - ma) / ma
-        result[f"return_{period}d"] = close / close.shift(period) - 1
+        result[f"ma_{period}_bias"] = ((close - ma) / ma).astype("float32")
+        result[f"return_{period}d"] = (close / close.shift(period) - 1).astype(
+            "float32"
+        )
     for short, long in itertools.pairwise(periods):
         result[f"ma_{short}_{long}_ratio"] = (
             result[f"ma_{short}"] / result[f"ma_{long}"]
-        )
+        ).astype("float32")
 
     # Count consecutive up/down closes. A flat close breaks either streak.
     delta = close.diff()
     status = pd.Series(
         np.where(delta > 0, 1, np.where(delta < 0, -1, 0)), index=df.index
     )
-    result["up_ratio_5d"] = status.eq(1).rolling(window=5, min_periods=5).mean()
-    result["up_ratio_20d"] = status.eq(1).rolling(window=20, min_periods=20).mean()
+    result["up_ratio_5d"] = (
+        status.eq(1).rolling(window=5, min_periods=5).mean().astype("float32")
+    )
+    result["up_ratio_20d"] = (
+        status.eq(1).rolling(window=20, min_periods=20).mean().astype("float32")
+    )
     return result
 
 
@@ -84,13 +92,15 @@ def compute_volume_momentum(df: pd.DataFrame, periods: list[int] | None = None):
     for period in periods:
         ma = volume.rolling(window=period, min_periods=1).mean()
         result[f"vol_ma_{period}"] = ma
-        result[f"vol_ma_{period}_bias"] = (volume - ma) / ma
-        result[f"vol_change_{period}d"] = volume / volume.shift(period) - 1
+        result[f"vol_ma_{period}_bias"] = ((volume - ma) / ma).astype("float32")
+        result[f"vol_change_{period}d"] = (volume / volume.shift(period) - 1).astype(
+            "float32"
+        )
 
     for short, long in itertools.pairwise(periods):
         result[f"vol_ma_{short}_{long}_ratio"] = (
             result[f"vol_ma_{short}"] / result[f"vol_ma_{long}"]
-        )
+        ).astype("float32")
     return result
 
 
@@ -122,36 +132,40 @@ def compute_activity_features(
     result = pd.DataFrame(index=df.index)
 
     amplitude = (high - low) / prev_close.where(prev_close > 0)
-    result["amplitude"] = amplitude
+    result["amplitude"] = amplitude.astype("float32")
 
     for period in periods:
-        result[f"amplitude_ma_{period}"] = amplitude.rolling(
-            window=period, min_periods=1
-        ).mean()
+        result[f"amplitude_ma_{period}"] = (
+            amplitude.rolling(window=period, min_periods=1).mean().astype("float32")
+        )
 
         turnover_ma = turnover.rolling(window=period, min_periods=1).mean()
         result[f"turnover_ma_{period}_bias"] = (
             turnover / turnover_ma.clip(lower=1e-6) - 1
-        )
+        ).astype("float32")
     amplitude_quantile = amplitude.rolling(window=quantile_period, min_periods=40).rank(
         pct=True
     )
     turnover_quantile = turnover.rolling(window=quantile_period, min_periods=40).rank(
         pct=True
     )
-    result[f"amplitude_quantile_{quantile_period}"] = amplitude_quantile
-    result[f"turnover_quantile_{quantile_period}"] = turnover_quantile
+    result[f"amplitude_quantile_{quantile_period}"] = amplitude_quantile.astype(
+        "float32"
+    )
+    result[f"turnover_quantile_{quantile_period}"] = turnover_quantile.astype("float32")
 
     # high intraday range and high turnover: active trading with elevated price dispersion.
-    result[f"activity_score_{quantile_period}"] = amplitude_quantile * turnover_quantile
+    result[f"activity_score_{quantile_period}"] = (
+        amplitude_quantile * turnover_quantile
+    ).astype("float32")
     # high intraday range and low turnover: a large price move occurring on relatively light trading.
     result[f"thin_trade_amplitude_score_{quantile_period}"] = amplitude_quantile * (
         1 - turnover_quantile
-    )
+    ).astype("float32")
     # low intraday range and high turnover: heavy trading activity with limited price movement.
     result[f"turnover_without_move_score_{quantile_period}"] = (
-        1 - amplitude_quantile
-    ) * turnover_quantile
+        (1 - amplitude_quantile) * turnover_quantile
+    ).astype("float32")
 
     return result
 
@@ -172,10 +186,12 @@ def compute_volatility(
     close = df["adj_close"]
     returns = close.pct_change()
     volatility = returns.rolling(window=window).std()
-    result["volatility_log"] = np.log(
-        volatility + 1e-8
+    result["volatility_log"] = np.log(volatility + 1e-8).astype(
+        "float32"
     )  # add 1e-8 to prevent log(0) = -inf
-    result["volatility_rank"] = volatility.rolling(window=rank_period).rank(pct=True)
+    result["volatility_rank"] = (
+        volatility.rolling(window=rank_period).rank(pct=True).astype("float32")
+    )
     return result
 
 
@@ -194,21 +210,23 @@ def compute_cci(
     result = pd.DataFrame(index=df.index)
     tp = (df["adj_high"] + df["adj_low"] + df["adj_close"]) / 3
     tp_sma = tp.rolling(window=window, min_periods=window).mean()
-    result["tp"] = tp
-    result["tp_sma"] = tp_sma
+    result["tp"] = tp.astype("float32")
+    result["tp_sma"] = tp_sma.astype("float32")
     # mean deviation
     md = tp.rolling(window=window, min_periods=window).apply(
         lambda values: np.mean(np.abs(values - values.mean())), raw=True
     )
     # 0.015 was defined by the CCI proposer Donald Lambert
     cci = (tp - tp_sma) / (0.015 * md.replace(0, np.nan))
-    result["cci"] = cci
+    result["cci"] = cci.astype("float32")
 
     # cci moving average
     if periods is None:
         periods = [5]
     for p in periods:
-        result[f"cci_ma_{p}"] = cci.rolling(window=p, min_periods=p).mean()
+        result[f"cci_ma_{p}"] = (
+            cci.rolling(window=p, min_periods=p).mean().astype("float32")
+        )
     return result
 
 
@@ -242,9 +260,9 @@ def compute_dema(df: pd.DataFrame, periods: list[int] | None = None) -> pd.DataF
 
         spread = dema_fast / dema_slow - 1
 
-        result[f"dema_{fast}_{slow}_fast"] = dema_fast
-        result[f"dema_{fast}_{slow}_slow"] = dema_slow
-        result[f"dema_{fast}_{slow}_spread"] = spread
+        result[f"dema_{fast}_{slow}_fast"] = dema_fast.astype("float32")
+        result[f"dema_{fast}_{slow}_slow"] = dema_slow.astype("float32")
+        result[f"dema_{fast}_{slow}_spread"] = spread.astype("float32")
         result[f"dema_{fast}_{slow}_gold"] = (
             (spread.shift(1) <= 0) & (spread > 0)
         ).astype(int)
@@ -282,16 +300,17 @@ def compute_macd(
     ) / ema_slow  # divide ema_slow for the normalization purpose
     dea = diff.ewm(span=signal_period, adjust=False).mean()
     macd_hist = diff - dea
+
+    result["macd_ema_slow"] = ema_slow.astype("float32")
+    result["macd_ema_fast"] = ema_fast.astype("float32")
+    result["macd_diff"] = diff.astype("float32")
+    result["macd_dea"] = dea.astype("float32")
+    result["macd_hist"] = macd_hist.astype("float32")
+
     macd_gold = ((macd_hist.shift(1) < 0) & (macd_hist > 0)).astype(int)
     macd_dead = ((macd_hist.shift(1) > 0) & (macd_hist < 0)).astype(int)
-
-    result["macd_ema_slow"] = ema_slow
-    result["macd_ema_fast"] = ema_fast
-    result["macd_gold"] = macd_gold
     result["macd_dead"] = macd_dead
-    result["macd_diff"] = diff
-    result["macd_dea"] = dea
-    result["macd_hist"] = macd_hist
+    result["macd_gold"] = macd_gold
 
     return result
 
@@ -323,11 +342,11 @@ def compute_bollinger_bands(
     bb_width = diff_ul / mid.replace(0, np.nan)
     bb_position = (close - lower) / diff_ul.replace(0, np.nan)
 
-    result["bb_upper"] = upper
-    result["bb_lower"] = lower
-    result["bb_mid"] = mid
-    result["bb_width"] = bb_width
-    result["bb_position"] = bb_position
+    result["bb_upper"] = upper.astype("float32")
+    result["bb_lower"] = lower.astype("float32")
+    result["bb_mid"] = mid.astype("float32")
+    result["bb_width"] = bb_width.astype("float32")
+    result["bb_position"] = bb_position.astype("float32")
     return result
 
 
@@ -369,11 +388,11 @@ def compute_kdj(df: pd.DataFrame, n: int = 9, m1: int = 3, m2: int = 3) -> pd.Da
     d = k.ewm(alpha=1 / m2, adjust=False).mean()
     j = 3 * k - 2 * d
 
-    result[f"kdj_low_{n}"] = low_n
-    result[f"kdj_high_{n}"] = high_n
-    result["kdj_k"] = k
-    result["kdj_d"] = d
-    result["kdj_j"] = j
+    result[f"kdj_low_{n}"] = low_n.astype("float32")
+    result[f"kdj_high_{n}"] = high_n.astype("float32")
+    result["kdj_k"] = k.astype("float32")
+    result["kdj_d"] = d.astype("float32")
+    result["kdj_j"] = j.astype("float32")
     return result
 
 
@@ -403,7 +422,7 @@ def compute_rsi(df: pd.DataFrame, periods: list[int] | None = None) -> pd.DataFr
 
         rs = avg_gain / avg_loss
         rsi = 100 - (100 / (1 + rs))
-        result[f"rsi_{period}"] = rsi
+        result[f"rsi_{period}"] = rsi.astype("float32")
         result[f"rsi_{period}_over_bought"] = (rsi > 70).astype(int)
         result[f"rsi_{period}_over_sold"] = (rsi < 30).astype(int)
 
@@ -430,11 +449,11 @@ def compute_obv(df: pd.DataFrame, periods: list[int] | None = None) -> pd.DataFr
         flow = signed_volume.rolling(period, min_periods=period).sum()
         result[f"obv_strength_{period}"] = (
             flow / volume.rolling(period, min_periods=period).sum()
-        )
+        ).astype("float32")
 
     for fast, slow in itertools.pairwise(periods):
         # between [2, -2]
         result[f"obv_strength_accel_{fast}_{slow}"] = (
             result[f"obv_strength_{fast}"] - result[f"obv_strength_{slow}"]
-        )
+        ).astype("float32")
     return result
