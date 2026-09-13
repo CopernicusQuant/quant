@@ -102,6 +102,7 @@ class DataStore:
             dataset = pq.ParquetDataset(self._local_stocks_path)
         table = dataset.read()
         df = table.to_pandas()
+        df.set_index(["ts_code", "trade_date"], inplace=True)
         return df
 
     def save_single_feature(
@@ -113,6 +114,16 @@ class DataStore:
             df.to_csv(f"{self._local_features_path}/{ts_code}.csv", index=False)
         else:
             table = pa.Table.from_pandas(df, preserve_index=False)
+            pq.write_table(
+                table,
+                f"{self._local_features_path}/{ts_code}.parquet",
+                compression="zstd",
+                compression_level=3,
+            )
+
+    def save_all_features(self, combined_df: pd.DataFrame) -> None:
+        for ts_code, stock_df in combined_df.groupby(level="ts_code", sort=False):
+            table = pa.Table.from_pandas(stock_df.reset_index())
             pq.write_table(
                 table,
                 f"{self._local_features_path}/{ts_code}.parquet",

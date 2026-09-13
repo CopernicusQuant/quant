@@ -1,4 +1,5 @@
 import pandas as pd
+from joblib import Parallel, delayed
 
 from .calculator_utils import (
     combine_stock_basics,
@@ -20,6 +21,34 @@ from .feature_meta import FEATURE_META_COLLECTION
 class FeatureCalculator:
     def __init__(self):
         self.feature_meta = FEATURE_META_COLLECTION
+
+    def compute_all_stock_features(
+        self, combined_stock_df: pd.DataFrame, combined_info_df: pd.DataFrame
+    ) -> pd.DataFrame:
+        # we should ensure the input stock df has two level of indices
+        assert combined_stock_df.index.nlevels == 2, (
+            "Input must have two indices (ts_code, trade_date)"
+        )
+        grouped = combined_stock_df.groupby(level="ts_code")
+
+        def _compute_per_stock(group: pd.DataFrame) -> pd.DataFrame:
+            group = group.reset_index(level="ts_code")
+            ts_code = group["ts_code"].iloc[0]
+            stock_info = combined_info_df[combined_info_df["ts_code"] == ts_code]
+            result = self.compute_stock_features(
+                stock_data_df=group, stock_info_df=stock_info
+            )
+            result = result.copy()
+            result = result.reset_index()
+            result.set_index(["ts_code", "trade_date"], inplace=True)
+            return result
+
+        # use n_jobs=-1 to use all cores
+        results = Parallel(n_jobs=-1, verbose=1)(
+            delayed(_compute_per_stock)(group) for _, group in grouped
+        )
+        result = pd.concat([r for r in results if r is not None], axis=0)
+        return result
 
     def compute_stock_features(
         self, stock_data_df: pd.DataFrame, stock_info_df

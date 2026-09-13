@@ -11,7 +11,7 @@ def vis_activity_features(
     if periods is None:
         periods = [5, 20]
 
-    plot_df = stock_df.join(feature_df)
+    plot_df = stock_df.join(feature_df, rsuffix="_act")
     plot_df["trade_date"] = stock_df.index
     plot_df = plot_df[plot_df["trade_date"] > "20250101"]
     x = range(len(plot_df))
