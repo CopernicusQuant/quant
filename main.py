@@ -10,15 +10,15 @@ def main():
     store = DataStore()
     feature_calculator = FeatureCalculator()
 
-    # ts_code = "AAPL"
-    # info = store.get_stock_list()
+    ts_code = "GOOG"
+    info = store.get_stock_list()
 
-    # stock_data_df = store.load_single_stock(ts_code=ts_code)
-    # stock_info_df = info[info["ts_code"] == ts_code]
-    # feature_df = feature_calculator.compute_stock_features(
-    #     stock_data_df=stock_data_df, stock_info_df=stock_info_df
-    # )
-    # store.save_single_feature(ts_code=ts_code, feature_df=feature_df)
+    stock_data_df = store.load_single_stock(ts_code=ts_code)
+    stock_info_df = info[info["ts_code"] == ts_code]
+    feature_df = feature_calculator.compute_stock_features(
+        stock_data_df=stock_data_df, stock_info_df=stock_info_df
+    )
+    store.save_single_feature(ts_code=ts_code, feature_df=feature_df, save_csv=True)
 
 
 if __name__ == "__main__":

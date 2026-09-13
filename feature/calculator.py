@@ -41,4 +41,4 @@ class FeatureCalculator:
             compute_volume_momentum(df=stock_data_df),
         ]
         result = pd.concat(new_features, axis=1)
-        return result
+        return result.sort_index()
